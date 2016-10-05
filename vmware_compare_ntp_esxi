@@ -1,0 +1,75 @@
+#JORGE NAVARRO MANZANO Script VMware compare ntp esxi
+#compare ntp time between localhost and remote esxi, if difference more than $threshold -> mail alarm
+#https://es.linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create ..\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create ..\credentials.txt
+#example:
+#useradminvcenter,passwordoftheuser
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destemail = "tso.sspp3@telefonica.com"
+$origemail = "vmwarepowercli@telefonica.es"
+$smtpserver = "localhost"
+
+$error.clear()
+
+Add-PSSnapin VMware.VimAutomation.Core
+Start-Transcript log.txt -append
+$threshold=60
+$vcenters = Get-Content -Path ..\vcenters.txt
+$credentials = Get-Content -Path ..\credentials.txt
+$user = ($credentials -split ",")[0]
+$password = ($credentials -split ",")[1]
+Connect-VIServer $vcenters -User $user -Password $password
+
+$texto= @()
+
+$esxis = get-view -ViewType HostSystem -Property Name, ConfigManager.DateTimeSystem | sort-object Name
+write-host "UTC -2"
+foreach ($esxi in $esxis)
+{
+	$dts = get-view $esxi.ConfigManager.DateTimeSystem
+	
+	$remoto = $dts.QueryDateTime()[0]
+	$local = (get-date).touniversaltime()
+	$dif = ( $remoto - $local).TotalSeconds
+	write-host $esxi.name "-" $remoto "spadm01" $local "- dif" $dif
+	if( $dif -gt $threshold)
+	{
+        $texto += $esxi.name + " - " + $remoto + " | localhost " + $local + " - dif " + $dif
+		write-host "dif" $threshold " seconds:" + $esxi.name
+    }
+}
+
+if($texto.count -gt 0)
+{
+	$texto += ""
+	$texto += "UTC -2"
+	$texto = Out-String -Inputobject $texto
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI ntp esxi" -body $texto -smtpServer $smtpserver
+}
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI ntp esxi, execution error" -body $errores -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
