@@ -41,7 +41,7 @@ foreach ($esxi in $esxis)
 	$remoto = $dts.QueryDateTime()[0]
 	$local = (get-date).touniversaltime()
 	$dif = ( $remoto - $local).TotalSeconds
-	write-host $esxi.name "-" $remoto "spadm01" $local "- dif" $dif
+	write-host $esxi.name "-" $remoto $name $local "- dif" $dif
 	if( $dif -gt $threshold)
 	{
         $texto += $esxi.name + " - " + $remoto + " | localhost " + $local + " - dif " + $dif
