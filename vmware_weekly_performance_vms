@@ -80,7 +80,7 @@ ForEach ($VM in (Get-VM | ? {$_.PowerState -eq "PoweredOn"} | Sort uid,Name))
 		$nodo
 		$infovms+=$nodo
 		
-		if([int]$nodo.CPUavg -gt 75 -or [int]$nodo.CPUready -gt 5 -or [int]$nodo.DiskavgMB -gt 100 -or [int]$nodo.DiskmaxLatencyms -gt 1000 -or [int]$nodo.DiskavgLatencyms -gt 50)
+		if([int]$nodo.CPUavg -gt 75 -or [int]$nodo.CPUready -gt 5 -or [int]$nodo.DiskavgMB -gt 100 -or [long]$nodo.DiskmaxLatencyms -gt 1000 -or [int]$nodo.DiskavgLatencyms -gt 50)
 		{
 			$nodoalerta = "" | Select Nodo, "VCenter", "OS", "CPUnum", "CPUavg", "CPUready", "DiskavgMB", "DiskmaxLatencyms", "DiskavgLatencyms"
 			$nodoalerta.Nodo = $nodo.Nodo;$nodoalerta.Vcenter = $nodo.VCenter;$nodoalerta.OS = $nodo.OS;$nodoalerta.CPUnum = $nodo.CPUnum;$nodoalerta.CPUavg = $nodo.CPUavg;$nodoalerta.CPUready = $nodo.CPUready;$nodoalerta.DiskavgMB = $nodo.DiskavgMB;$nodoalerta.DiskmaxLatencyms = $nodo.DiskmaxLatencyms;$nodoalerta.DiskavgLatencyms = $nodo.DiskavgLatencyms;
