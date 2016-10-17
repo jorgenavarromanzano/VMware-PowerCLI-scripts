@@ -1,5 +1,5 @@
 #JORGE NAVARRO MANZANO Script VMware compare ntp esxi
-#compare ntp time between localhost and remote esxi, if difference more than $threshold -> mail alarm
+#compare ntp time between localhost and remote esxi, if difference more than 60seconds -> mail alarm
 #https://es.linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
@@ -23,13 +23,13 @@ $error.clear()
 
 Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
-$threshold=60
 $vcenters = Get-Content -Path ..\vcenters.txt
 $credentials = Get-Content -Path ..\credentials.txt
 $user = ($credentials -split ",")[0]
 $password = ($credentials -split ",")[1]
 Connect-VIServer $vcenters -User $user -Password $password
 
+$name = hostname
 $texto= @()
 
 $esxis = get-view -ViewType HostSystem -Property Name, ConfigManager.DateTimeSystem | sort-object Name
@@ -42,7 +42,7 @@ foreach ($esxi in $esxis)
 	$local = (get-date).touniversaltime()
 	$dif = ( $remoto - $local).TotalSeconds
 	write-host $esxi.name "-" $remoto $name $local "- dif" $dif
-	if( $dif -gt $threshold)
+	if( ($dif -gt 60) -or ($dif -lt -60) )
 	{
         $texto += $esxi.name + " - " + $remoto + " | localhost " + $local + " - dif " + $dif
 		write-host "dif" $threshold " seconds:" + $esxi.name
