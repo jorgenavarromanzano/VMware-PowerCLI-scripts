@@ -1,0 +1,80 @@
+#JORGE NAVARRO MANZANO Script VMware datastore freespace
+#if any datastore has less than the $threshold of free MB it sends an email and generates a windows event which can be monitored
+#it generates event 301 source nameofvcenter type warning description datastorename
+#it filters datastores with names *local* *boot* *iso* *placeholder* *Veeam*
+#https://es.linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create ..\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create ..\credentials.txt
+#example:
+#useradminvcenter,passwordoftheuser
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destemail = "tso.sspp3@telefonica.com"
+$origemail = "vmwarepowercli@telefonica.es"
+$smtpserver = "localhost"
+$thresholdmail=30000
+$thresholdevent=15000
+
+$error.clear()
+
+Add-PSSnapin VMware.VimAutomation.Core
+Start-Transcript log.txt -append
+$vcenters = Get-Content -Path ..\vcenters.txt
+$credentials = Get-Content -Path ..\credentials.txt
+$user = ($credentials -split ",")[0]
+$password = ($credentials -split ",")[1]
+Connect-VIServer $vcenters -User $user -Password $password
+
+$datastores= @()
+$texto= @()
+
+$datastores = get-datastore | select Datacenter,Name,FreeSpaceMB,Type,Uid | Where-Object {$_.Name -notlike "*local*" -and $_.Name -notlike "*boot*" -and $_.Name -notlike "*iso*" -and $_.Name -notlike "*placeholder*" -and $_.Name -notlike "*Veeam*"}
+
+foreach ($datastore in $datastores)
+{
+	write-host $datastore
+	if($datastore.FreeSpaceMB -lt $threshold)
+	{
+		$vcenter= $datastore.uid -split "@" -split ":443"
+		$datacenter = $datastore.Datacenter.tostring()
+		$texto += $vcenter[1] +" "+ $datacenter +" "+ $datastore.Name +" "+ $datastore.FreeSpaceMB
+		if($datastore.FreespaceMB -lt $thresholdevent)
+		{
+			eventcreate /T warning /L application /ID 301 /SO $vcenter[1] /D $datastore.name
+		}
+	}
+}
+
+if($texto.count -gt 0)
+{
+	Start-ScheduledTask snapshots-clones
+	$texto = Out-String -Inputobject $texto
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI datastore free space" -body $texto -smtpServer $smtpserver
+}
+
+write-host $texto
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail  -subject "VMware PowerCLI datastore free space, execution error" -body $errores -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
