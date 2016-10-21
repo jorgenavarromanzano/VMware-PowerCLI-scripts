@@ -1,0 +1,75 @@
+#JORGE NAVARRO MANZANO Script VMware dead paths
+#connect to all vcenters and checks every path in every esxi to every datastore
+#if there is 1 or more dead paths it sends an email
+#https://es.linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create ..\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create ..\credentials.txt
+#example:
+#useradminvcenter,passwordoftheuser
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destemail = "tso.sspp3@telefonica.com"
+$origemail = "vmwarepowercli@telefonica.es"
+$smtpserver = "localhost"
+
+$error.clear()
+
+Add-PSSnapin VMware.VimAutomation.Core
+Start-Transcript log.txt -append
+
+$vcenters = Get-Content -Path ..\vcenters.txt | ? {$_ -notlike "*voc*" -and $_ -notlike "*icex*"}
+$credentials = Get-Content -Path ..\credentials.txt
+$user = ($credentials -split ",")[0]
+$password = ($credentials -split ",")[1]
+Connect-VIServer $vcenters -User $user -Password $password
+
+$texto= @()
+
+foreach ($lun in (get-vmhost | sort | get-scsilun | ? {$_.luntype -eq "disk"}))
+{
+	$vcenter= $lun.uid -split "@" -split ":443"
+	write-host $vcenter[1] + $lun.VMHost
+	foreach ($scsipath in ($lun | get-scsilunpath))
+	{
+		$nLUN = (($lun.RunTimeName -Split "L")[1] -as [Int])
+		$path = $vcenter[1] + " " + $lun.VMHost + " LUN:" + $nLUN + " " + $scsipath.state + " " + $lun.capacitygb +"GB " + $lun.MultiPathPolicy + " " + $lun.RuntimeName + " " + $scsipath.Name
+		if($scsipath.state -eq "Dead")
+		{
+			eventcreate /T warning /L application /ID 302 /SO $vcenter[1] /D $path
+			$texto += $path
+		}
+		write-host $path
+	}
+}
+
+if($texto.count -gt 0)
+{
+	$texto = Out-String -Inputobject $texto
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI dead paths" -body $texto -smtpServer $smtpserver
+}
+write-host $texto
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI dead paths, execution error" -body $errores -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
