@@ -25,7 +25,7 @@ $error.clear()
 Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
 
-$vcenters = Get-Content -Path ..\vcenters.txt | ? {$_ -notlike "*voc*" -and $_ -notlike "*icex*"}
+$vcenters = Get-Content -Path ..\vcenters.txt
 $credentials = Get-Content -Path ..\credentials.txt
 $user = ($credentials -split ",")[0]
 $password = ($credentials -split ",")[1]
