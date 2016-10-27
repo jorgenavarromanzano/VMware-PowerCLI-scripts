@@ -2,7 +2,7 @@
 #last 7 days report with performance of vms
 #info: vCenter, VM, ESX, OS, CPUnum, CPUmax, CPUavg, CPUmin, CPUready, DiskmaxMB, DiskavgMB, DiskminMB
 #info: DiskmaxLatencyms, DiskavgLatencyms, DiskminLatencyms, NetmaxMB, NetavgMB, NetminMB
-#https://es.linkedin.com/in/jorgenavarromanzano
+#https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
 #Instructions:
