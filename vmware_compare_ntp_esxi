@@ -1,6 +1,6 @@
 #JORGE NAVARRO MANZANO Script VMware compare ntp esxi
 #compare ntp time between localhost and remote esxi, if difference more than 60seconds -> mail alarm
-#https://es.linkedin.com/in/jorgenavarromanzano
+#https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
 #Instructions:
