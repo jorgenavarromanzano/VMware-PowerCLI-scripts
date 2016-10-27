@@ -1,7 +1,7 @@
 #JORGE NAVARRO MANZANO Script VMware dead paths
 #connect to all vcenters and checks every path in every esxi to every datastore
 #if there is 1 or more dead paths it sends an email
-#https://es.linkedin.com/in/jorgenavarromanzano
+#https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
 #Instructions:
