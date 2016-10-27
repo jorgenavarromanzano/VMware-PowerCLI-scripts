@@ -1,6 +1,6 @@
 #JORGE NAVARRO MANZANO Script daily report vmware
 #daily report of one or multiples vcenters with warnings, errors, alarms, vmotions etc.
-#https://es.linkedin.com/in/jorgenavarromanzano
+#https://linkedin.com/in/jorgenavarromanzano
 #more scripts here: https://github.com/jorgenavarromanzano
 #used Get-VIEventPlus function for vmotions from LUCD http://www.lucd.info/2013/03/31/get-the-vmotionsvmotion-history/
 
