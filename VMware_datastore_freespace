@@ -2,7 +2,7 @@
 #if any datastore has less than the $threshold of free MB it sends an email and generates a windows event which can be monitored
 #it generates event 301 source nameofvcenter type warning description datastorename
 #it filters datastores with names *local* *boot* *iso* *placeholder* *Veeam*
-#https://es.linkedin.com/in/jorgenavarromanzano
+#https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
 #Instructions:
