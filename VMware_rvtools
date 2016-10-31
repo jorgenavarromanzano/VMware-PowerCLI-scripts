@@ -1,0 +1,76 @@
+#JORGE NAVARRO MANZANO Script email of rvtools multiple vcenters
+#sends rvtools of differents vcenters
+#uses rvtools from http://www.robware.net/ and 7z.exe from http://www.7-zip.org/ (copy files to .\bin)
+#saves in .\history (create folder) all rvtools with the date in the filename
+#https://linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create ..\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create ..\credentials.txt
+#example:
+#useradminvcenter,passwordoftheuser
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destemail = "tso.sspp3@telefonica.com"
+$origemail = "spadm01@telefonica.es"
+$smtpserver = "localhost"
+
+$error.clear()
+Start-Transcript log.txt -append
+del *.zip
+del *.xls
+
+$fecha = get-date -format yyyyMMdd
+if(Test-Path .\history\"$fecha"_rvtools.zip)
+{
+	del .\history\"$fecha"_rvtools.zip
+}
+
+stop-process -processname rvtools -ErrorAction Ignore
+
+$vcenters = Get-Content -Path ..\vcenters.txt
+$credentials = Get-Content -Path ..\credentials.txt
+$user = ($credentials -split ",")[0]
+$password = ($credentials -split ",")[1]
+
+foreach ($vcenter in ($vcenters))
+{
+		.\bin\rvtools.exe -u $user -p $password -s $vcenter -c ExportAll2xls -d ./ -f $vcenter + ".xls"
+		Start-Sleep -s 300
+}
+Start-Sleep -s 1000
+
+if((get-item *.xls).count -ne $vcenters.count + 2)
+{
+	$errores = Out-String -Inputobject (get-item *.xls)
+	send-mailmessage -from $origemail -to $destemail -subject "rvtools, not all rvtools sent review execution" -body $errores -smtpServer $smtpserver
+}
+
+.\bin\7z.exe a rvtools.zip *.xls -mx9
+
+Rename-Item .\rvtools.zip $fecha"_rvtools.zip"
+mv .\*.zip .\history
+del *.xls
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "rvtools, execution error" -body $errores -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
