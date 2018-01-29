@@ -4,7 +4,7 @@
 #used Get-VIEventPlus function for vmotions from LUCD http://www.lucd.info/2013/03/31/get-the-vmotionsvmotion-history/
 
 #Instructions:
-#add your vcenters, change passwords, and mails
+#add your vcenters, change passwords, user that launchs tasks of backups, and mails
 
 function Get-VIEventPlus {
 <#   
@@ -122,7 +122,7 @@ Connect-VIServer $vcentersvdc -User "asdfasff" -Password "dafasdfasdf"
 
 $eventsavamar = @()
 $textosnapshots = @()
-$eventsavamar += Get-VIEventPlus -user "VDC\avamaruser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
+$eventsavamar += Get-VIEventPlus -user "avamaruser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
 $vms = Get-View -ViewType virtualmachine -Property Name,resourcepool,snapshot
 $rpools = Get-View -ViewType resourcepool -Property Name
 if($eventsavamar.count -gt 0)
