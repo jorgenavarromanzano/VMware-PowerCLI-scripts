@@ -1,5 +1,5 @@
-#JORGE NAVARRO MANZANO Script avamar failed consolidation disks
-#daily report with snapshot not consolidated by avamar backup
+#JORGE NAVARRO MANZANO Script daily report vmware
+#daily report of one or multiples vcenters with warnings, errors, alarms, vmotions etc.
 #https://linkedin.com/in/jorgenavarromanzano
 #used Get-VIEventPlus function for vmotions from LUCD http://www.lucd.info/2013/03/31/get-the-vmotionsvmotion-history/
 
@@ -123,25 +123,30 @@ Connect-VIServer $vcentersvdc -User "asdfasff" -Password "dafasdfasdf"
 $eventsavamar = @()
 $textosnapshots = @()
 $eventsavamar += Get-VIEventPlus -user "VDC\avamaruser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
-
+$vms = Get-View -ViewType virtualmachine -Property Name,resourcepool,snapshot
+$rpools = Get-View -ViewType resourcepool -Property Name
 if($eventsavamar.count -gt 0)
 {
 	foreach ($eventavamar in $eventsavamar)
 	{
-		$vm = get-vm $eventavamar.objectname
-		$vcenter = ($vm.uid -split "@" -split ":443")[1]
+		$vm = $vms | ? {$_.Name -eq $eventavamar.objectname}
+		$vcenter = ($vm.client.serviceurl -split "/")[2]
+		$rpool = $rpools | ? {$_.moref.value -eq $vm.resourcepool.value}
+		$vdcorg = $rpool.name
 		$vdcorg = $vm.resourcepool.name
-		$vdcorg = ($vdcorg -split " " -split " ")[0]
 		$cluster = $eventavamar.ComputeResource.name
 		$createdtime = get-date $eventavamar.CreatedTime -format yyyy/MM/dd_HH:mm:ss
-		write-host $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
-		$texto += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
-		$snapshots = get-snapshot $vm | ? {$_.description -notlike "*vcloud director*"}
-		if($snapshots.count -gt 0)
+		write-host $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm.name + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
+		$texto += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm.name + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
+		if($vm.snapshot.count -gt 0)
 		{
-			$sendmail = 1
-			write-host "nodo con snapshot y evento fallo consolidation: "+ $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm
-			$textosnapshots += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm
+			$snapshots = get-snapshot $vm.name | ? {$_.description -notlike "*vcloud director*"}
+			if($snapshots.count -gt 0)
+			{
+				$sendmail = 1
+				write-host "nodo con snapshot y evento fallo consolidation: "+ $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm.name
+				$textosnapshots += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm.name
+			}
 		}
 	}
 }
