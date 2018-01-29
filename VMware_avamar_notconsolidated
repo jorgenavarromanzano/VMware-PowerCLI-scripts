@@ -133,7 +133,6 @@ if($eventsavamar.count -gt 0)
 		$vcenter = ($vm.client.serviceurl -split "/")[2]
 		$rpool = $rpools | ? {$_.moref.value -eq $vm.resourcepool.value}
 		$vdcorg = $rpool.name
-		$vdcorg = $vm.resourcepool.name
 		$cluster = $eventavamar.ComputeResource.name
 		$createdtime = get-date $eventavamar.CreatedTime -format yyyy/MM/dd_HH:mm:ss
 		write-host $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm.name + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
