@@ -1,0 +1,185 @@
+#JORGE NAVARRO MANZANO Script avamar failed consolidation disks
+#daily report with snapshot not consolidated by avamar backup
+#https://linkedin.com/in/jorgenavarromanzano
+#used Get-VIEventPlus function for vmotions from LUCD http://www.lucd.info/2013/03/31/get-the-vmotionsvmotion-history/
+
+#Instructions:
+#add your vcenters, change passwords, and mails
+
+function Get-VIEventPlus {
+<#   
+.SYNOPSIS  Returns vSphere events    
+.DESCRIPTION The function will return vSphere events. With
+the available parameters, the execution time can be
+improved, compered to the original Get-VIEvent cmdlet. 
+.NOTES  Author:  Luc Dekens   
+.PARAMETER Entity
+When specified the function returns events for the
+specific vSphere entity. By default events for all
+vSphere entities are returned. 
+.PARAMETER EventType
+This parameter limits the returned events to those
+specified on this parameter. 
+.PARAMETER Start
+The start date of the events to retrieve 
+.PARAMETER Finish
+The end date of the events to retrieve. 
+.PARAMETER Recurse
+A switch indicating if the events for the children of
+the Entity will also be returned 
+.PARAMETER User
+The list of usernames for which events will be returned 
+.PARAMETER System
+A switch that allows the selection of all system events. 
+.PARAMETER ScheduledTask
+The name of a scheduled task for which the events
+will be returned 
+.PARAMETER FullMessage
+A switch indicating if the full message shall be compiled.
+This switch can improve the execution speed if the full
+message is not needed.   
+.EXAMPLE
+PS> Get-VIEventPlus -Entity $vm
+.EXAMPLE
+PS> Get-VIEventPlus -Entity $cluster -Recurse:$true
+#>
+param(
+[VMware.VimAutomation.ViCore.Impl.V1.Inventory.InventoryItemImpl[]]$Entity,
+[string[]]$EventType,
+[DateTime]$Start,
+[DateTime]$Finish = (Get-Date),
+[switch]$Recurse,
+[string[]]$User,
+[Switch]$System,
+[string]$ScheduledTask,
+[switch]$FullMessage = $false
+)
+process {
+$eventnumber = 100
+$events = @()
+$eventMgr = Get-View EventManager
+$eventFilter = New-Object VMware.Vim.EventFilterSpec
+$eventFilter.disableFullMessage = ! $FullMessage
+$eventFilter.entity = New-Object VMware.Vim.EventFilterSpecByEntity
+$eventFilter.entity.recursion = &{if($Recurse){"all"}else{"self"}}
+$eventFilter.eventTypeId = $EventType
+if($Start -or $Finish){
+$eventFilter.time = New-Object VMware.Vim.EventFilterSpecByTime
+if($Start){
+$eventFilter.time.beginTime = $Start
+}
+if($Finish){
+$eventFilter.time.endTime = $Finish
+}
+}
+if($User -or $System){
+$eventFilter.UserName = New-Object VMware.Vim.EventFilterSpecByUsername
+if($User){
+$eventFilter.UserName.userList = $User
+}
+if($System){
+$eventFilter.UserName.systemUser = $System
+}
+}
+if($ScheduledTask){
+$si = Get-View ServiceInstance
+$schTskMgr = Get-View $si.Content.ScheduledTaskManager
+$eventFilter.ScheduledTask = Get-View $schTskMgr.ScheduledTask |
+where {$_.Info.Name -match $ScheduledTask} |
+Select -First 1 |
+Select -ExpandProperty MoRef
+}
+if(!$Entity){
+$Entity = @(Get-Folder -Name Datacenters)
+}
+$entity | %{
+$eventFilter.entity.entity = $_.ExtensionData.MoRef
+$eventCollector = Get-View ($eventMgr.CreateCollectorForEvents($eventFilter))
+$eventsBuffer = $eventCollector.ReadNextEvents($eventnumber)
+while($eventsBuffer){
+$events += $eventsBuffer
+$eventsBuffer = $eventCollector.ReadNextEvents($eventnumber)
+}
+$eventCollector.DestroyCollector()
+}
+$events
+}
+}
+
+$error.clear()
+
+Start-Transcript log.txt -append
+$texto = @()
+
+$vcentersvdc = @()
+$sendmail = 0
+
+$vcentersvdc += "vcserver1"
+$vcentersvdc += "172.10.10.1"
+$vcentersvdc += "vcserver2"
+
+Connect-VIServer $vcentersvdc -User "asdfasff" -Password "dafasdfasdf"
+
+$eventsavamar = @()
+$textosnapshots = @()
+$eventsavamar += Get-VIEventPlus -user "VDC\avamaruser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
+
+if($eventsavamar.count -gt 0)
+{
+	foreach ($eventavamar in $eventsavamar)
+	{
+		$vm = get-vm $eventavamar.objectname
+		$vcenter = ($vm.uid -split "@" -split ":443")[1]
+		$vdcorg = $vm.resourcepool.name
+		$vdcorg = ($vdcorg -split " " -split " ")[0]
+		$cluster = $eventavamar.ComputeResource.name
+		$createdtime = get-date $eventavamar.CreatedTime -format yyyy/MM/dd_HH:mm:ss
+		write-host $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
+		$texto += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm + " | " + $createdtime + " | " + $eventavamar.FullFormattedMessage
+		$snapshots = get-snapshot $vm | ? {$_.description -notlike "*vcloud director*"}
+		if($snapshots.count -gt 0)
+		{
+			$sendmail = 1
+			write-host "nodo con snapshot y evento fallo consolidation: "+ $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm
+			$textosnapshots += $vcenter + " | " + $cluster + " | " + $vdcorg + " | " + $vm
+		}
+	}
+}
+
+$textosnapshots = $textosnapshots | get-unique
+
+$texto = $texto | sort
+$textofinal = @()
+$textofinal += "Revisar con rvtools discos agregados a las maquinas proxy de avamar, quitarlos sin eliminarlos y consolidar snapshots"
+$textofinal += ""
+$textofinal += "Nodos con snapshot sin consolidar:"
+$textofinal += "vcenter | cluster | vdcorg | vm"
+$textofinal += $textosnapshots
+$textofinal += ""
+$textofinal += "vcenter | cluster | vdcorg | vm | CreatedTime | Message"
+$textofinal += $texto
+write-host "--------------------------------------------------"
+$textofinal += "--------------------------------------------------"
+
+$textofinal = Out-String -Inputobject $textofinal
+if($sendmail -eq 1)
+{
+	send-mailmessage -from "vmwarepowercli_spadm01@telefonica.es" -to "tso.sspp3@telefonica.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup" -body $textofinal -smtpServer localhost
+}
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from "vmwarepowercli_spadm01@telefonica.es" -to "tso.sspp3@telefonica.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup, revisar errores" -body $errores -smtpServer localhost
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
