@@ -15,8 +15,8 @@
 #you need access to port 443 of the vcenters
 
 #change this variables to your emails and smtpserver:
-$destemail = "tso.sspp3@telefonica.com"
-$origemail = "vmwarepowercli@telefonica.es"
+$destemail = "destmail@mail.com"
+$origemail = "origmail@mail.com"
 $smtpserver = "localhost"
 
 $error.clear()
