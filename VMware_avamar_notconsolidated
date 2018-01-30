@@ -1,5 +1,4 @@
-#JORGE NAVARRO MANZANO Script daily report vmware
-#daily report of one or multiples vcenters with warnings, errors, alarms, vmotions etc.
+#JORGE NAVARRO MANZANO script daily report vms with not consolidated snapshots from backup
 #https://linkedin.com/in/jorgenavarromanzano
 #used Get-VIEventPlus function for vmotions from LUCD http://www.lucd.info/2013/03/31/get-the-vmotionsvmotion-history/
 
@@ -111,18 +110,18 @@ $error.clear()
 Start-Transcript log.txt -append
 $texto = @()
 
-$vcentersvdc = @()
+$vcenters = @()
 $sendmail = 0
 
-$vcentersvdc += "vcserver1"
-$vcentersvdc += "172.10.10.1"
-$vcentersvdc += "vcserver2"
+$vcenters += "vcserver1"
+$vcenters += "172.10.10.1"
+$vcenters += "vcserver2"
 
-Connect-VIServer $vcentersvdc -User "asdfasff" -Password "dafasdfasdf"
+Connect-VIServer $vcenters -User "asdfasff" -Password "dafasdfasdf"
 
 $eventsavamar = @()
 $textosnapshots = @()
-$eventsavamar += Get-VIEventPlus -user "avamaruser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
+$eventsavamar += Get-VIEventPlus -user "backupuser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
 $vms = Get-View -ViewType virtualmachine -Property Name,resourcepool,snapshot
 $rpools = Get-View -ViewType resourcepool -Property Name
 if($eventsavamar.count -gt 0)
@@ -168,13 +167,13 @@ $textofinal += "--------------------------------------------------"
 $textofinal = Out-String -Inputobject $textofinal
 if($sendmail -eq 1)
 {
-	send-mailmessage -from "vmwarepowercli_spadm01@telefonica.es" -to "tso.sspp3@telefonica.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup" -body $textofinal -smtpServer localhost
+	send-mailmessage -from "mail@mail.com" -to "destinymail@mail.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup" -body $textofinal -smtpServer localhost
 }
 
 if($error.count -gt 0)
 {
 	$errores = Out-String -Inputobject $error
-	send-mailmessage -from "vmwarepowercli_spadm01@telefonica.es" -to "tso.sspp3@telefonica.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup, revisar errores" -body $errores -smtpServer localhost
+	send-mailmessage -from "mail@mail.com" -to "destinymail@mail.com" -subject "VMware PowerCLI errores consolidacion avamar vdc backup, revisar errores" -body $errores -smtpServer localhost
 }
 
 Stop-Transcript
