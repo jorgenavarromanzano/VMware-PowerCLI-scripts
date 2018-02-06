@@ -122,11 +122,12 @@ Connect-VIServer $vcenters -User "asdfasff" -Password "dafasdfasdf"
 $eventsavamar = @()
 $textosnapshots = @()
 $eventsavamar += Get-VIEventPlus -user "backupuser" -EventType "com.vmware.vc.VmDiskFailedToConsolidateEvent" -Start (get-date).addhours(-25)
+$eventsavamarunique = $eventsavamar | Sort-Object objectname -unique
 $vms = Get-View -ViewType virtualmachine -Property Name,resourcepool,snapshot
 $rpools = Get-View -ViewType resourcepool -Property Name
-if($eventsavamar.count -gt 0)
+if($eventsavamarunique.count -gt 0)
 {
-	foreach ($eventavamar in $eventsavamar)
+	foreach ($eventavamar in $eventsavamarunique)
 	{
 		$vm = $vms | ? {$_.Name -eq $eventavamar.objectname}
 		$vcenter = ($vm.client.serviceurl -split "/")[2]
@@ -149,7 +150,7 @@ if($eventsavamar.count -gt 0)
 	}
 }
 
-$textosnapshots = $textosnapshots | get-unique
+$textosnapshots = $textosnapshots | sort
 
 $texto = $texto | sort
 $textofinal = @()
@@ -159,6 +160,7 @@ $textofinal += "Nodos con snapshot sin consolidar:"
 $textofinal += "vcenter | cluster | vdcorg | vm"
 $textofinal += $textosnapshots
 $textofinal += ""
+$textofinal += "Eventos de fallos de backup avamar en nodos(puede haberse consolidado a posterior automaticamente)"
 $textofinal += "vcenter | cluster | vdcorg | vm | CreatedTime | Message"
 $textofinal += $texto
 write-host "--------------------------------------------------"
