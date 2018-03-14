@@ -1,0 +1,199 @@
+#JORGE NAVARRO MANZANO Script vmware performance vms
+#report with performance of vms
+#info: node, vcenter, host, rpool, performance of cpu,ram,disk,net
+#https://linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#parameters:
+#destemail,origemail,smtpserver,namevorgs
+#timereport month,week,day,4hours,1hour
+#uservcenter,passvcenter
+#extralevel (requires statistics level 2 in vcenter) 1=YES, 0=NO
+#namereport
+#vcenter1,vcenter2,vcenter3,vcenter4,vcenter5,vcenter6,vcenter7,vcenter8,vcenter9,vcenter10
+
+#run example:
+#.\vmware_performance_vms.ps1 "jorge.navarromanzano@enterprise1.com" "origemail@enterprise1.com" "smtpserver.enterprise1.com" "*" "day" "user" "userpassword" "1" "reportname" "vcenter1" "vcenter2" "vcenter3" "" "" "" "" "" "" ""
+#run as task:
+#powershell -file e:\tareas\vmware\vmware_performance_vms\vmware_performance_vms.ps1 "jorge.navarromanzano@enterprise1.com" "origemail@enterprise1.com" "smtpserver.enterprise1.com" "*" "day" "user" "userpassword" "1" "reportname" "vcenter1" "vcenter2" "" "" "" "" "" "" "" ""
+
+$error.clear()
+$vcenters = @()
+if($args[0] -ne "" -and $args[1] -ne "" -and $args[2] -ne "" -and $args[3] -ne "" -and $args[4] -ne "" -and $args[5] -ne "" -and $args[6] -ne "" -and $args[7] -ne "" -and $args[8] -ne "" -and $args[9] -ne "")
+{
+	$destemail=$args[0];$origemail=$args[1];$smtpserver=$args[2];$namevorgs=$args[3];$timereport=$args[4];$uservcenter=$args[5];$passvcenter=$args[6];$extralevel=$args[7];$reportname=$args[8];$vcenter1=$args[9]
+	$vcenter2=$args[10];$vcenter3=$args[11];$vcenter4=$args[12];$vcenter5=$args[13];$vcenter6=$args[14];$vcenter7=$args[15];$vcenter8=$args[16];$vcenter9=$args[17];$vcenter10=$args[18];
+	Start-Transcript log_$reportname.txt -append
+	if($vcenter1 -ne $null -and $vcenter1 -ne ""){$vcenters += $vcenter1};if($vcenter2 -ne $null -and $vcenter2 -ne ""){$vcenters += $vcenter2};if($vcenter3 -ne $null -and $vcenter3 -ne ""){$vcenters += $vcenter3};if($vcenter4 -ne $null -and $vcenter4 -ne ""){$vcenters += $vcenter4};if($vcenter5 -ne $null -and $vcenter5 -ne ""){$vcenters += $vcenter5}
+	if($vcenter6 -ne $null -and $vcenter6 -ne ""){$vcenters += $vcenter6};if($vcenter7 -ne $null -and $vcenter7 -ne ""){$vcenters += $vcenter7};if($vcenter8 -ne $null -and $vcenter8 -ne ""){$vcenters += $vcenter8};if($vcenter9 -ne $null -and $vcenter9 -ne ""){$vcenters += $vcenter9};if($vcenter10 -ne $null -and $vcenter10 -ne ""){$vcenters += $vcenter10}
+}
+
+if($destemail -eq $null -or $origemail -eq $null -or $smtpserver -eq $null -or $namevorgs -eq $null -or $timereport -eq $null -or $vcenter1 -eq $null -or $uservcenter -eq $null -or $passvcenter -eq $null -or $extralevel -eq $null -or $reportname -eq $null)
+{
+	#variables
+	$reportname = read-host("report name? (default report)")
+	if($reportname -eq ""){$reportname = "report"}
+	Start-Transcript log_$reportname.txt -append
+	$destemail = read-host("email destination: (default jorge.navarromanzano@mail.com)")
+	if($destemail -eq ""){$destemail = "jorge.navarromanzano@mail.com"}
+	$origemail = read-host("email origin: (default spadm01@mail.es)")
+	if($origemail -eq ""){$origemail = "spadm01@mail.es"}
+	$smtpserver = read-host("smtp server: (default localhost)")
+	if($smtpserver -eq ""){$smtpserver = "localhost"}
+
+	$namevorgs = read-host("name of vorgs? (for example *bank2*, default *:)")
+	if($namevorgs -eq ""){$namevorgs = "*"}
+
+	$timereport = read-host("time: month;week;day;4hours;1hour (default day)")
+	if($timereport -eq ""){$timereport = "day"}
+
+	$vcenter1 = read-host("name of vcenter1? (add vcenter)")
+	$vcenter2 = read-host("name of vcenter2? (add vcenter) (enter for none)")
+	$vcenter3 = read-host("name of vcenter3? (add vcenter) (enter for none)")
+	$vcenter4 = read-host("name of vcenter4? (add vcenter) (enter for none)")
+	$vcenter5 = read-host("name of vcenter5? (add vcenter) (enter for none)")
+	$vcenter6 = read-host("name of vcenter6? (add vcenter) (enter for none)")
+	$vcenter7 = read-host("name of vcenter7? (add vcenter) (enter for none)")
+	$vcenter8 = read-host("name of vcenter8? (add vcenter) (enter for none)")
+	$vcenter9 = read-host("name of vcenter9? (add vcenter) (enter for none)")
+	$vcenter10 = read-host("name of vcenter10? (add vcenter) (enter for none)")
+	if($vcenter1 -ne ""){$vcenters += $vcenter1};if($vcenter2 -ne ""){$vcenters += $vcenter2};if($vcenter3 -ne ""){$vcenters += $vcenter3};if($vcenter4 -ne ""){$vcenters += $vcenter4};if($vcenter5 -ne ""){$vcenters += $vcenter5}
+	if($vcenter6 -ne ""){$vcenters += $vcenter6};if($vcenter7 -ne ""){$vcenters += $vcenter7};if($vcenter8 -ne ""){$vcenters += $vcenter8};if($vcenter9 -ne ""){$vcenters += $vcenter9};if($vcenter10 -ne ""){$vcenters += $vcenter10}
+
+	$uservcenter = read-host("user credentials? (example vcenter\user1)")
+	$passvcenter = read-host -assecurestring ("user password?")
+	
+	$extralevel = read-host("extra level statistics? (needs level 2 vcenter statistics) 1=YES,0=NO default 1=YES")
+	if($extralevel -eq ""){$extralevel = "1"}
+}
+else
+{
+	$passvcenter = convertto-securestring $passvcenter -AsPlainText -force
+}
+
+$Finish=get-date
+switch($timereport)
+{
+	"month" {$start=(get-date).addmonths(-1)}
+	"week" {$start=(get-date).adddays(-7)}
+	"day" {$start=(get-date).adddays(-1)}
+	"4hours" {$start=(get-date).addhours(-4)}
+	"1hour" {$start=(get-date).addhours(-1)}
+}
+
+$cred = New-Object System.Management.Automation.PSCredential -ArgumentList $uservcenter,$passvcenter
+
+write-host "numvcenters:" + $vcenters.count
+write-host $vcenters
+Connect-VIServer $vcenters -credential $cred
+
+$infovms=@()
+$alertsvms=@()
+$mailbody = "performance info of vms from last $timereport, review infovms.csv/html and alertsvms.html for vms with performance problems"
+
+$rpool = Get-ResourcePool $namevorgs
+$vms = $rpool | get-vm
+
+ForEach ($VM in ($vms | ? {$_.PowerState -eq "PoweredOn"} | Sort uid,Name))
+{
+	if($vm.powerState -eq "PoweredOn")
+	{
+		$node = "" | Select node, "VCenter", "rpool" , "HostESX", "OS", "CPUnum", "CPUmax", "CPUavg", "CPUreadymax" ,"CPUreadyavg", "DiskmaxMB", "DiskavgMB", "DiskmaxLatencyms", "DiskavgLatencyms", "NetmaxMB", "NetavgMB", "NetdroppedRxsum" , "NetdroppedTxsum" , "vmmemctlmax" , "vmmemctlavg" , "memswapinmax" , "memswapinavg" , "memswapoutmax" , "memswapoutavg"
+		$node.node = $VM.Name
+		$vcenter= $VM.uid -split "@" -split ":443"
+		$node.VCenter = $vcenter[1]
+		$node.rpool = $vm.resourcepool.name
+		$node.HostESX = $VM.VMHost
+		$node.OS = $VM.guest.OSFullName
+		$node.CPUnum = $VM.NumCPU
+		$cpustat = get-stat -entity $VM -Start $Start -Finish $Finish -Stat "cpu.usage.average" | Measure-Object -Property Value -Average -maximum
+		$node.CPUmax = "{0:N0}" -f $($cpustat.maximum)
+		$node.CPUavg = "{0:N0}" -f $($cpustat.average)
+		$cpuready = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "Cpu.Ready.Summation" | Measure-Object -Property Value -Average -maximum)
+		$node.CPUreadymax = [int]($cpuready.maximum / $node.CPUnum)
+		$node.CPUreadyavg = [int]($cpuready.average / $node.CPUnum)
+		switch($timereport)
+		{
+			"month" {$node.CPUreadymax = [int]($node.CPUreadymax / 72000);$node.CPUreadyavg = [int]($node.CPUreadyavg / 72000)}
+			"week" {$node.CPUreadymax = [int]($node.CPUreadymax / 18000);$node.CPUreadyavg = [int]($node.CPUreadyavg / 18000)}
+			"day" {$node.CPUreadymax = [int]($node.CPUreadymax / 3000);$node.CPUreadyavg = [int]($node.CPUreadyavg / 3000)}
+			"4hours" {$node.CPUreadymax = [int]($node.CPUreadymax / 3000);$node.CPUreadyavg = [int]($node.CPUreadyavg / 3000)}
+			"1hour" {$node.CPUreadymax = [int]($node.CPUreadymax / 3000);$node.CPUreadyavg = [int]($node.CPUreadyavg / 3000)}
+		}
+		$discousostat = get-stat -entity $VM -Start $Start -Finish $Finish -Stat "disk.usage.average" | Measure-Object -Property Value -Average -maximum
+		$node.DiskmaxMB = "{0:N0}" -f $($discousostat.maximum/1024)
+		$node.DiskavgMB = "{0:N0}" -f $($discousostat.average/1024)
+		$discolatstat = get-stat -entity $VM -Start $Start -Finish $Finish -Stat "disk.maxTotalLatency.latest" | Measure-Object -Property Value -Average -maximum
+		$node.DiskmaxLatencyms = $discolatstat.maximum
+		$node.DiskavgLatencyms = "{0:N0}" -f $($discolatstat.average)
+		
+		$numnics = @()
+		$nics = Get-NetworkAdapter $vm
+		foreach($nic in $nics){$numnics+=1}
+		if(($nics).connectionstate.connected -eq $true -and $numnics -gt 0)
+		{
+			$redusostat = get-stat -entity $VM -Start $Start -Finish $Finish -Stat "net.usage.average" | Measure-Object -Property Value -Average -maximum
+			$node.NetmaxMB = "{0:N0}" -f $($redusostat.maximum/1024)
+			$node.NetavgMB = "{0:N0}" -f $($redusostat.average/1024)
+			if($extralevel -eq 1)
+			{
+				$node.NetdroppedRxsum = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "net.droppedRx.summation" | Measure-Object -Property Value -sum).sum
+				$node.NetdroppedTxsum = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "net.droppedTx.summation" | Measure-Object -Property Value -sum).sum
+			}
+		}
+		else
+		{
+			$node.NetmaxMB = 0
+			$node.NetavgMB = 0
+			$node.NetdroppedRxsum = 0
+			$node.NetdroppedTxsum = 0
+		}
+		if($extralevel -eq 1)
+		{
+			$vmmemctl = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "mem.vmmemctl.average" | Measure-Object -Property Value -maximum -average)
+			$node.vmmemctlmax = [int]$vmmemctl.maximum
+			$node.vmmemctlavg = [int]$vmmemctl.average
+			$memswapin = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "mem.swapin.average" | Measure-Object -Property Value -maximum -average)
+			$node.memswapinmax = [int]$memswapin.maximum
+			$node.memswapinavg = [int]$memswapin.average
+			$memswapout = (get-stat -entity $VM -Start $Start -Finish $Finish -Stat "mem.swapout.average" | Measure-Object -Property Value -maximum -average)
+			$node.memswapoutmax = [int]$memswapout.maximum
+			$node.memswapoutavg = [int]$memswapout.average
+		}
+		
+		$node
+		$infovms+=$node
+		
+		if([int]$node.CPUavg -gt 60 -or [int]$node.CPUreadymax -gt 10 -or [int]$node.CPUreadyavg -gt 2 -or [int]$node.DiskavgMB -gt 50 -or [long]$node.DiskmaxLatencyms -gt 2000 -or [int]$node.DiskavgLatencyms -gt 25 -or [int]$node.NetavgMB -gt 50)
+		{
+			$nodealert = "" | Select node, "VCenter", "RPool", "OS", "CPUnum", "CPUavg", "CPUreadymax", "CPUreadyavg", "DiskavgMB", "DiskmaxLatencyms", "DiskavgLatencyms", "NetavgMB"
+			$nodealert.node = $node.node;$nodealert.Vcenter = $node.vcenter;$nodealert.RPool = $node.rpool;$nodealert.OS = $node.OS;$nodealert.CPUnum = $node.CPUnum;$nodealert.CPUavg = $node.CPUavg;$nodealert.CPUreadymax = $node.CPUreadymax;$nodealert.CPUreadyavg = $node.CPUreadyavg;$nodealert.DiskavgMB = $node.DiskavgMB;$nodealert.DiskmaxLatencyms = $node.DiskmaxLatencyms;$nodealert.DiskavgLatencyms = $node.DiskavgLatencyms;$nodealert.NetavgMB = $node.NetavgMB
+			$alertsvms += $nodealert
+			clear-variable nodealert
+		}
+		clear-variable node
+	}
+}
+
+$infovms | export-csv infovms_$reportname.csv
+$infovms | convertto-html | out-file infovms_$reportname.html
+$alertsvms | convertto-html -body "thresholds: CPUavg > 60% | CPUreadymax>10% | CPUreadyavg > 2% | DiskavgMB/s > 50MB/s | DiskmaxLatencyms > 2000ms | DiskavgLatencyms > 25ms | NetavgMB > 50" | out-file alertsvms_$reportname.html
+
+send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI $reportname performance last $timereport vms" -body $mailbody -Attachments "infovms_$reportname.csv","infovms_$reportname.html","alertsvms_$reportname.html" -smtpServer $smtpserver
+
+if($error.count -gt 0)
+{
+	$errores = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI $reportname performance last $timereport vms, execution error" -body $errores -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log_$reportname.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log_$reportname.txt.old)
+	{
+		remove-item	.\log_$reportname.txt.old
+	}
+	Rename-Item .\log_$reportname.txt .\log_$reportname.txt.old
+}
