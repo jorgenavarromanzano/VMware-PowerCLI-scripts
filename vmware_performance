@@ -1,6 +1,6 @@
 #JORGE NAVARRO MANZANO Script vmware performance vms/esx
 #report with performance of vms/esx
-#info: node, vcenter, host, rpool, performance of cpu,ram,disk,net,cpuready
+#info: node, vcenter, host, rpool, performance of cpu,cpuready,ram,disk,net and much more
 #https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 
