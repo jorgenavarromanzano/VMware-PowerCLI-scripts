@@ -43,10 +43,10 @@ if($destemail -eq $null -or $origemail -eq $null -or $smtpserver -eq $null -or $
 	$reportname = read-host("report name? (default report)")
 	if($reportname -eq ""){$reportname = "report"}
 	Start-Transcript .\output\log_$reportname.txt -append
-	$destemail = read-host("email destination: (default jorge.navarromanzano@enterprise.com)")
-	if($destemail -eq ""){$destemail = "jorge.navarromanzano@enterprise.com"}
-	$origemail = read-host("email origin: (default spadm01@enterprise.es)")
-	if($origemail -eq ""){$origemail = "spadm01@enterprise.es"}
+	$destemail = read-host("email destination: (default jorge.navarromanzano@mail.com)")
+	if($destemail -eq ""){$destemail = "jorge.navarromanzano@mail.com"}
+	$origemail = read-host("email origin: (default orig@mail.com)")
+	if($origemail -eq ""){$origemail = "spadm01@mail.es"}
 	$smtpserver = read-host("smtp server: (default localhost)")
 	if($smtpserver -eq ""){$smtpserver = "localhost"}
 
@@ -110,9 +110,13 @@ if($type -eq "esx")
 
 	$cluster = get-cluster $filter1
 	$esxs = $cluster | get-vmhost $filter2
+	$nesxs = $esxs.count
+	$esxsdone = 0
 
 	ForEach ($esx in ($esxs | ? {$_.PowerState -eq "PoweredOn" -and $_.ConnectionState -ne "Maintenance"} | Sort uid,Name))
 	{
+		$esxsdone = $esxsdone + 1
+		write-host "Number ESX:"$nesxs" Actual ESX:"$esxsdone
 		if($esx.powerState -eq "PoweredOn")
 		{
 			$node = "" | Select node,"VCenter","cluster","version","CPUnum","CPUvms","RAMGB","CPUmax","CPUavg","RAMmax","RAMavg","CPUlatencymax","CPUlatencyavg","DiskmaxMB","DiskavgMB","DiskmaxLatencyms","DiskavgLatencyms","NetmaxMB","NetavgMB","NetdroppedRxsum","NetdroppedTxsum","MEMswapusedmax","MEMswapusedavg","MEMlatencymax","MEMlatencyavg","vmmemctlmax","vmmemctlavg","memswapinratemax","memswapinrateavg","memswapoutratemax","memswapoutrateavg"
@@ -169,10 +173,10 @@ if($type -eq "esx")
 			}
 			$node
 			$infoesx+=$node
-			if([int]$node.CPUavg -gt 85 -or [int]$node.RAMavg -gt 85)
+			if([int]$node.CPUavg -gt 90 -or [int]$node.RAMavg -gt 90 -or [int]$node.DiskavgMB -gt 400 -or [int]$node.DiskavgLatencyms -gt 15 -or [int]$node.NetavgMB -gt 250 -or [int]$node.MEMswapusedavg -gt 0 -or [int]$node.vmmemctlavg -gt 0)
 			{
-				$nodealert = "" | Select node,"VCenter","cluster","CPUnum","RAMGB","CPUmax","CPUavg","RAMmax","RAMavg"
-				$nodealert.node = $node.node;$nodealert.Vcenter = $node.vcenter;$nodealert.cluster = $node.cluster;$nodealert.CPUnum = $node.CPUnum;$nodealert.RAMGB = $node.RAMGB;$nodealert.CPUmax = $node.CPUmax;$nodealert.CPUavg = $node.CPUavg;$nodealert.RAMmax = $node.RAMmax;$nodealert.RAMavg = $node.RAMavg
+				$nodealert = "" | Select node,"VCenter","cluster","CPUnum","RAMGB","CPUmax","CPUavg","RAMmax","RAMavg","DiskavgMB","DiskavgLatencyms","NetavgMB","MEMswapusedavg","vmmemctlavg"
+				$nodealert.node = $node.node;$nodealert.Vcenter = $node.vcenter;$nodealert.cluster = $node.cluster;$nodealert.CPUnum = $node.CPUnum;$nodealert.RAMGB = $node.RAMGB;$nodealert.CPUmax = $node.CPUmax;$nodealert.CPUavg = $node.CPUavg;$nodealert.RAMmax = $node.RAMmax;$nodealert.RAMavg = $node.RAMavg;$nodealert.DiskavgMB = $node.DiskavgMB;$nodealert.DiskavgLatencyms = $node.DiskavgLatencyms;$nodealert.NetavgMB = $node.NetavgMB;$nodealert.MEMswapusedavg = $node.MEMswapusedavg;$nodealert.vmmemctlavg = $node.vmmemctlavg
 				$alertsesx += $nodealert
 				clear-variable nodealert
 			}
@@ -181,7 +185,7 @@ if($type -eq "esx")
 	}
 	$infoesx | export-csv .\output\infoesx_$reportname.csv
 	$infoesx | convertto-html | out-file .\output\infoesx_$reportname.html
-	$alertsesx | convertto-html -body "thresholds: CPUavg > 85% | RAMavg > 85%" | out-file .\output\alertsesx_$reportname.html
+	$alertsesx | convertto-html -body "thresholds: CPUavg>90% | RAMavg>90% | DiskavgMB>400MB/s | DiskavgLatencyms>15ms | NetavgMB>250MB/s | MEMswapusedavg>0 | vmmemctlavg>0" | out-file .\output\alertsesx_$reportname.html
 	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI $reportname performance last $timereport esx" -body $mailbody -Attachments ".\output\infoesx_$reportname.csv",".\output\infoesx_$reportname.html",".\output\alertsesx_$reportname.html" -smtpServer $smtpserver
 }
 
@@ -192,10 +196,17 @@ if($type -eq "vm")
 	$mailbody = "performance info of vms from last $timereport, review infovms.csv/html and alertsvms.html for vms with performance problems"
 
 	$rpool = Get-ResourcePool $filter1
+	if($rpool -eq $null)
+	{
+		$rpool = Get-Cluster $filter1
+	}
 	$vms = $rpool | get-vm $filter2
-
+	$nvms = $vms.count
+	$vmsdone = 0
 	ForEach ($VM in ($vms | ? {$_.PowerState -eq "PoweredOn"} | Sort uid,Name))
 	{
+		$vmsdone = $vmsdone + 1
+		write-host "Number VMs:"$nvms" Actual VM:"$vmsdone
 		if($vm.powerState -eq "PoweredOn")
 		{
 			$node = "" | Select node,"VCenter","rpool","HostESX","OS","CPUnum","CPUsockXcores","CPUmax","CPUavg","CPUlatencymax","CPUlatencyavg","CPUreadymax","CPUreadyavg","DiskmaxMB","DiskavgMB","DiskmaxLatencyms","DiskavgLatencyms","NetmaxMB","NetavgMB","NetdroppedRxsum","NetdroppedTxsum","MEMswappedmax","MEMswappedavg","MEMlatencymax","MEMlatencyavg","vmmemctlmax","vmmemctlavg","memswapinratemax","memswapinrateavg","memswapoutratemax","memswapoutrateavg"
@@ -263,10 +274,10 @@ if($type -eq "vm")
 			$node
 			$infovms+=$node
 			
-			if([int]$node.CPUavg -gt 60 -or [int]$node.CPUreadymax -gt 10 -or [int]$node.CPUreadyavg -gt 2 -or [int]$node.DiskavgMB -gt 100 -or [long]$node.DiskmaxLatencyms -gt 500 -or [int]$node.DiskavgLatencyms -gt 25 -or [int]$node.NetavgMB -gt 100)
+			if([int]$node.CPUavg -gt 60 -or [int]$node.CPUreadymax -gt 9 -or [int]$node.CPUreadyavg -gt 3 -or [int]$node.DiskavgMB -gt 100 -or [long]$node.DiskmaxLatencyms -gt 500 -or [int]$node.DiskavgLatencyms -gt 15 -or [int]$node.NetavgMB -gt 100 -or [int]$node.MEMswapusedavg -gt 0 -or [int]$node.vmmemctlavg -gt 0)
 			{
-				$nodealert = "" | Select node, "VCenter", "RPool", "OS", "CPUnum", "CPUavg", "CPUreadymax", "CPUreadyavg", "DiskavgMB", "DiskmaxLatencyms", "DiskavgLatencyms", "NetavgMB"
-				$nodealert.node = $node.node;$nodealert.Vcenter = $node.vcenter;$nodealert.RPool = $node.rpool;$nodealert.OS = $node.OS;$nodealert.CPUnum = $node.CPUnum;$nodealert.CPUavg = $node.CPUavg;$nodealert.CPUreadymax = $node.CPUreadymax;$nodealert.CPUreadyavg = $node.CPUreadyavg;$nodealert.DiskavgMB = $node.DiskavgMB;$nodealert.DiskmaxLatencyms = $node.DiskmaxLatencyms;$nodealert.DiskavgLatencyms = $node.DiskavgLatencyms;$nodealert.NetavgMB = $node.NetavgMB
+				$nodealert = "" | Select node,"VCenter","RPool","OS","CPUnum","CPUavg","CPUreadymax","CPUreadyavg","DiskavgMB","DiskmaxLatencyms","DiskavgLatencyms","NetavgMB","MEMswapusedavg","vmmemctlavg"
+				$nodealert.node = $node.node;$nodealert.Vcenter = $node.vcenter;$nodealert.RPool = $node.rpool;$nodealert.OS = $node.OS;$nodealert.CPUnum = $node.CPUnum;$nodealert.CPUavg = $node.CPUavg;$nodealert.CPUreadymax = $node.CPUreadymax;$nodealert.CPUreadyavg = $node.CPUreadyavg;$nodealert.DiskavgMB = $node.DiskavgMB;$nodealert.DiskmaxLatencyms = $node.DiskmaxLatencyms;$nodealert.DiskavgLatencyms = $node.DiskavgLatencyms;$nodealert.NetavgMB = $node.NetavgMB;$nodealert.MEMswapusedavg = $node.MEMswapusedavg;$nodealert.vmmemctlavg = $node.vmmemctlavg
 				$alertsvms += $nodealert
 				clear-variable nodealert
 			}
@@ -276,7 +287,7 @@ if($type -eq "vm")
 
 	$infovms | export-csv .\output\infovms_$reportname.csv
 	$infovms | convertto-html | out-file .\output\infovms_$reportname.html
-	$alertsvms | convertto-html -body "thresholds: CPUavg > 60% | CPUreadymax>10% | CPUreadyavg > 2% | DiskavgMB/s > 100MB/s | DiskmaxLatencyms > 500ms | DiskavgLatencyms > 25ms | NetavgMB > 100" | out-file .\output\alertsvms_$reportname.html
+	$alertsvms | convertto-html -body "thresholds: CPUavg>60% | CPUreadymax>9% | CPUreadyavg>3% | DiskavgMB/s>100MB/s | DiskmaxLatencyms>500ms | DiskavgLatencyms>15ms | NetavgMB>100MB/s | MEMswapusedavg>0 | vmmemctlavg>0" | out-file .\output\alertsvms_$reportname.html
 	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI $reportname performance last $timereport vms" -body $mailbody -Attachments ".\output\infovms_$reportname.csv",".\output\infovms_$reportname.html",".\output\alertsvms_$reportname.html" -smtpServer $smtpserver
 }
 
