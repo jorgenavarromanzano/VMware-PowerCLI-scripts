@@ -1,31 +1,12 @@
-#JORGE NAVARRO MANZANO Script VMware dead paths
-#connect to all vcenters and checks every path in every esxi to every datastore
-#if there is 1 or more dead paths it sends an email
-#https://linkedin.com/in/jorgenavarromanzano
-#more scripts here https://github.com/jorgenavarromanzano
-
-#Instructions:
-#create ..\vcenters.txt
-#example:
-#vcenter1
-#vcenterb
-#vcenter2000
-#create ..\credentials.txt
-#example:
-#useradminvcenter,passwordoftheuser
-#you need access to port 443 of the vcenters
-
-#change this variables to your emails and smtpserver:
-$destemail = "destmail@mail.com"
-$origemail = "origmail@gmail.com"
+$destemail = "tso.sspp3@mail.com"
+$origemail = "vmwarepowercli@mail.es"
 $smtpserver = "localhost"
 
 $error.clear()
 
-Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
 
-$vcenters = Get-Content -Path ..\vcenters.txt
+$vcenters = Get-Content -Path ..\vcenters.txt | ? {$_ -notlike "*voc*" -and $_ -notlike "*icex*"}
 $credentials = Get-Content -Path ..\credentials.txt
 $user = ($credentials -split ",")[0]
 $password = ($credentials -split ",")[1]
@@ -33,34 +14,91 @@ Connect-VIServer $vcenters -User $user -Password $password
 
 $texto= @()
 
-foreach ($lun in (get-vmhost | sort | get-scsilun | ? {$_.luntype -eq "disk"}))
+$infohosts = Get-View -ViewType "HostSystem" -Property Name,Config.StorageDevice,config.MultipathState.path | sort name
+$hostswdeadpaths = $infohosts | ? {$_.config.MultipathState.path.pathstate -eq "dead" -or $_.config.MultipathState.path.pathstate -eq "disabled"}
+$hostswhbanotonline = $infohosts | ? {$_.config.StorageDevice.HostBusAdapter.nodeworldwidename -ne $null -and $_.config.StorageDevice.HostBusAdapter.status -ne "online" -and $_.config.StorageDevice.HostBusAdapter.key -like "*FibreChannelHba*" -and $_.config.StorageDevice.HostBusAdapter.model -like "*Fibre Channel*" -and $_.config.StorageDevice.HostBusAdapter.UnderlyingNic -eq $null}
+$hostswoddpaths = $infohosts
+#filtrorenfe paths impares
+$hostswoddpaths = $hostswoddpaths | ? {$_.name -notlike "*renfe*"}
+
+if($hostswhbanotonline.count -gt 0)
 {
-	$vcenter= $lun.uid -split "@" -split ":443"
-	write-host $vcenter[1] + $lun.VMHost
-	foreach ($scsipath in ($lun | get-scsilunpath))
+	foreach ($hostwhbanotonline in $hostswhbanotonline)
 	{
-		$nLUN = (($lun.RunTimeName -Split "L")[1] -as [Int])
-		$path = $vcenter[1] + " " + $lun.VMHost + " LUN:" + $nLUN + " " + $scsipath.state + " " + $lun.capacitygb +"GB " + $lun.MultiPathPolicy + " " + $lun.RuntimeName + " " + $scsipath.Name
-		if($scsipath.state -eq "Dead")
+		$vcenter = ($hostshbanotonline.client.ServiceUrl -split "/")[2]
+		$hbasnotonline = $hostwhbanotonline.config.StorageDevice.HostBusAdapter | ? {$_.nodeworldwidename -ne $null -and $_.status -ne "online" -and $_.key -like "*FibreChannelHba*" -and $_.model -like "*Fibre Channel*" -and $_.UnderlyingNic -eq $null}
+		foreach ($hbanotonline in $hbasnotonline)
 		{
-			eventcreate /T warning /L application /ID 302 /SO $vcenter[1] /D $path
-			$texto += $path
+			write-host "hbanotonline: | "+ $vcenter+" | " + $hostwhbanotonline.Name + " | " + $hbanotonline.device + " | " + $hbanotonline.model + " | " + $hbanotonline.status
+			$texto += "hbanotonline: | "+ $vcenter+" | " + $hostwhbanotonline.Name + " | " + $hbanotonline.device + " | " + $hbanotonline.model + " | " + $hbanotonline.status
 		}
-		write-host $path
+	}
+}
+
+if($hostswoddpaths.count -gt 0)
+{
+	$scsiluns = Get-ScsiLun -vmhost $hostswoddpaths.name | ? {$_.luntype -eq "disk" -and $_.islocal -ne $true}
+
+	foreach ($hostwoddpaths in $hostswoddpaths)
+	{
+		$vcenter = ($hostwoddpaths.client.ServiceUrl -split "/")[2]
+		foreach($lun in $hostwoddpaths.config.storagedevice.multipathinfo.lun | ? {$_.storagearraytypepolicy.policy -ne "VMW_SATP_LOCAL"})
+		{
+			$scsilungb = [int]($scsilun.capacitygb)
+			$npaths = $lun.path.count
+			if($npaths -ne 2 -and $npaths -ne 4 -and $npaths -ne 8 -and $npaths -ne 16)
+			{
+				$scsilun = $scsiluns | ? {$_.key -eq $lun.lun} | Select-Object -first 1
+				$nLUN = (($scsilun.RunTimeName -Split "L")[1] -as [Int])
+				$texto += "OddPaths: | "+ $vcenter+" | " + $hostwoddpaths.Name + " | LUN:" + $nLUN + " | " + $scsilungb + "GB | Vendor:" + $scsilun.vendor + " | npaths:" +$npaths
+				write-host "OddPaths: | "+ $vcenter+" | " + $hostwoddpaths.Name + " | LUN:" + $nLUN + " | " + $scsilungb + "GB | Vendor:" + $scsilun.vendor + " | npaths:" +$npaths
+			}
+		}
+	}
+}
+
+if($hostswdeadpaths.count -gt 0)
+{
+	$scsiluns = Get-ScsiLun -vmhost $hostswdeadpaths.name | ? {$_.luntype -eq "disk" -and $_.islocal -ne $true}
+
+	foreach ($hostswdeadpath in $hostswdeadpaths)
+	{
+		$vcenter = ($hostswdeadpath.client.ServiceUrl -split "/")[2]
+		$luns = $hostswdeadpath.config.storagedevice.scsilun
+		foreach ($lun in $luns)
+		{
+			$scsilun = $scsiluns | ? {$_.canonicalname -eq $lun.canonicalname} | Select-Object -first 1
+			$nLUN = (($scsilun.RunTimeName -Split "L")[1] -as [Int])
+			$scsipathlun = $hostswdeadpath.config.storagedevice.MultipathInfo.lun | ? {$_.lun -eq $lun.key}
+			$scsipaths = $scsipathlun.path | ? {$_.state -eq "dead" -or $_.state -eq "disabled"}
+			foreach ($scsipath in $scsipaths)
+			{
+				$path_vmhba = ($scsipath.adapter -split "key-vim.host.FibreChannelHba-")[1]
+				$scsipathtportwwn = "{0:X}" -f $scsipath.Transport.PortWorldWideName
+				$scsipathtnodewwn = "{0:X}" -f $scsipath.Transport.NodeWorldWideName
+				$target = $scsipathtnodewwn +" "+$scsipathtportwwn
+				$scsilungb = [int]($scsilun.capacitygb)
+				$event = "Dead Path: " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
+				#eventcreate /T warning /L application /ID 302 /SO $vcenter /D $event
+				$texto += "DeadPath: | " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
+				write-host "DeadPath: | " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
+			}
+		}
 	}
 }
 
 if($texto.count -gt 0)
 {
 	$texto = Out-String -Inputobject $texto
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI dead paths" -body $texto -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI review paths" -body $texto -smtpServer $smtpserver
+	write-host $texto
+	write-host "email sent"
 }
-write-host $texto
 
 if($error.count -gt 0)
 {
 	$errores = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI dead paths, execution error" -body $errores -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI review paths, execution error" -body $errores -smtpServer $smtpserver
 }
 
 Stop-Transcript
