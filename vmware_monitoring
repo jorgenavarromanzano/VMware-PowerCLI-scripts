@@ -1,0 +1,124 @@
+#JORGE NAVARRO MANZANO Script vmware monitoring
+#monitoring of esxi availability and performance
+#cpu, ram, latency datastores, vmnic uplinks
+#also any esxi host <> connected (maintenance,no connection etc.)
+#https://linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create .\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create .\credentials.txt
+#example:
+#useradminvcenter,passwordoftheuser
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destemail = "jorge.navarromanzano@email.com"
+$origemail = "vmwarepowercli@email.es"
+$smtpserver = "localhost"
+#cpu/ram performance warning and critical, example 94 and 98
+$warning_alarm = 95
+$critical_alarm = 98
+#datastore max latency ms warning and critical, example 50 and 200
+$warning_maxlatency = 50
+$critical_maxlatency = 200
+
+$error.clear()
+
+Start-Transcript log.txt -append
+$text = @()
+$vcenters = @()
+$vcenters = Get-Content -Path .\vcenters.txt
+$credentials = Get-Content -Path .\credentials.txt
+$user = ($credentials -split ",")[0]
+$password = ($credentials -split ",")[1]
+$pass = ConvertTo-SecureString -AsPlainText $password -Force
+$cred = New-Object System.Management.Automation.PSCredential -ArgumentList $user,$pass
+
+Connect-VIServer $vcenters -credential $cred
+$esxihosts = get-vmhost | sort uid,name
+
+$cpustats = @();$ramstats = @();$latencystats = @();$nicsnolink = @()
+#check performance cpu,ram,maxlatency
+$cpustats = get-stat -entity $esxihosts -realtime -Stat "cpu.usage.average" -maxsamples 1 -instance "" | ? {$_.Value -gt $warning_alarm}
+$ramstats = get-stat -entity $esxihosts -realtime -Stat "mem.usage.average" -maxsamples 1 -instance "" | ? {$_.Value -gt $warning_alarm}
+$latencystats = get-stat -entity $esxihosts -realtime -stat "datastore.maxTotalLatency.latest" -maxsamples 1 | ? {$_.Value -gt $warning_maxlatency}
+#check nics without link inside any switch
+$nicsnolink = Get-VMHostNetworkAdapter -VirtualSwitch * -physical | ? {$_.bitratepersec -eq 0}
+
+if($cpustats.count -gt 0 -or $ramstats.count -gt 0 -or $latencystats.count -gt 0 -or $nicsnolink.count -gt 0)
+{
+	sleep 60
+	#recheck if any problem after 60 seconds
+	$cpustats2 = @();$ramstats2 = @();$latencystats2 = @();$nicsnolink2 = @()
+	foreach($cpustat in $cpustats)
+	{
+		$cpustats2 += get-stat -entity $cpustat.entity -realtime -Stat "cpu.usage.average" -maxsamples 1 -instance "" | ? {$_.Value -gt $warning_alarm}
+	}
+	foreach($ramstat in $ramstats)
+	{
+		$ramstats2 += get-stat -entity $ramstat.entity -realtime -Stat "mem.usage.average" -maxsamples 1 -instance "" | ? {$_.Value -gt $warning_alarm}
+	}
+	foreach($latencystat in $latencystats)
+	{
+		$latencystats2 += get-stat -entity $latencystat.entity -realtime -stat "datastore.maxTotalLatency.latest" -maxsamples 1 | ? {$_.Value -gt $warning_maxlatency}
+	}
+	$nicsnolink2 = Get-VMHostNetworkAdapter -VirtualSwitch * -physical | ? {$_.bitratepersec -eq 0}
+}
+
+#if any error after rechecking create alarms
+if($cpustats2.count -gt 0 -or $ramstats2.count -gt 0 -or $latencystats2.count -gt 0 -or $nicsnolink2.count -gt 0)
+{
+	foreach($cpustat2 in $cpustats2){$text+=($cpustat2.uid -split "@" -split ":443")[1] + " | " + $cpustat2.entity + " | " + $cpustat2.metricid + " | " + $cpustat2.value + $cpustat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $cpustat2.Timestamp)}
+	foreach($ramstat2 in $ramstats2){$text+=($ramstat2.uid -split "@" -split ":443")[1] + " | " + $ramstat2.entity + " | " + $ramstat2.metricid + " | " + $ramstat2.value + $ramstat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $ramstat2.Timestamp)}
+	foreach($latencystat2 in $latencystats2){$text+=($latencystat2.uid -split "@" -split ":443")[1] + " | " + $latencystat2.entity + " | " + $latencystat2.metricid + " | " + $latencystat2.value + $latencystat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $latencystat2.Timestamp)}
+	foreach($nicnolink2 in $nicsnolink2)
+	{
+		$esxcli = Get-EsxCli -VMHost $nicnolink2.VMHost
+		$switch_nicnolink = ""
+		$switch_nicnolink = ($esxcli.network.vswitch.dvs.vmware.list() | ? {$_.uplinks -eq $nicnolink2.name}).name
+		if($switch_nicnolink -eq $null)
+		{
+			$switch_nicnolink = ($esxcli.network.vswitch.standard.list() | ? {$_.uplinks -eq $nicnolink2.name}).name
+		}
+		$text+=($nicnolink2.uid -split "@" -split ":443")[1] + " | " + $nicnolink2.VMHost + " | " + $nicnolink2.name + " | " + $switch_nicnolink + " | BitRatePerSec:" + $nicnolink2.BitRatePerSec + " | FullDuplex:" + $nicnolink2.fullduplex
+	}
+}
+
+#check esxi hosts <> connected
+
+$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,@{Name="vcenter";Expression={$vcenter}},Connectionstate,Powerstate | sort vcenter,name
+foreach ($hostnotconnected in $hostsnotconnected)
+{
+	$text += $hostnotconnected.vcenter + " | " + $hostnotconnected.name + " | " + $hostnotconnected.connectionstate + " | " + $hostnotconnected.Powerstate 
+}	
+
+$text = $text | sort
+write-host $text
+
+if($text.count -gt 0)
+{
+	$text = Out-String -Inputobject $text
+	send-mailmessage -from $origemail -to $destemail -subject "VMware monitoring, review body" -body $text -smtpServer $smtpserver
+}
+
+if($error.count -gt 0)
+{
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "VMware monitoring, execution error" -body $errors -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
