@@ -6,19 +6,28 @@
 #more scripts here https://github.com/jorgenavarromanzano
 
 #Instructions:
-#create .\vcenters.txt
+#create ..\vcenters.txt
 #example:
 #vcenter1
 #vcenterb
 #vcenter2000
-#create .\credentials.txt
+#create ..\credentials.txt
 #example:
 #useradminvcenter,passwordoftheuser
 #you need access to port 443 of the vcenters
 
+#alarms eventlogviewer
+#all events created in application with source name of the vcenter type warning with message all the info of the alarms
+#includes all the info of the alarm in the description of the event (also the name of the host)
+#cpu alarm eventid 401
+#ram alarm eventid 402
+#latency alarm eventid 403
+#nicnolink alarm eventid 404
+#esxi <> connected and power on alarm 405
+
 #change this variables to your emails and smtpserver:
-$destemail = "jorge.navarromanzano@email.com"
-$origemail = "vmwarepowercli@email.es"
+$destemail = "tso.sspp3@aaaa.com"
+$origemail = "vmwarepowercli@aaaa.com"
 $smtpserver = "localhost"
 #cpu/ram performance warning and critical, example 94 and 98
 $warning_alarm = 95
@@ -32,8 +41,15 @@ $error.clear()
 Start-Transcript log.txt -append
 $text = @()
 $vcenters = @()
-$vcenters = Get-Content -Path .\vcenters.txt
-$credentials = Get-Content -Path .\credentials.txt
+$vcenters = Get-Content -Path ..\vcenters.txt
+foreach($vcenter in $vcenters)
+{
+	if(![System.Diagnostics.EventLog]::SourceExists($vcenter))
+	{
+		new-eventlog -log application -source $vcenter
+	}
+}
+$credentials = Get-Content -Path ..\credentials.txt
 $user = ($credentials -split ",")[0]
 $password = ($credentials -split ",")[1]
 $pass = ConvertTo-SecureString -AsPlainText $password -Force
@@ -73,9 +89,27 @@ if($cpustats.count -gt 0 -or $ramstats.count -gt 0 -or $latencystats.count -gt 0
 #if any error after rechecking create alarms
 if($cpustats2.count -gt 0 -or $ramstats2.count -gt 0 -or $latencystats2.count -gt 0 -or $nicsnolink2.count -gt 0)
 {
-	foreach($cpustat2 in $cpustats2){$text+=($cpustat2.uid -split "@" -split ":443")[1] + " | " + $cpustat2.entity + " | " + $cpustat2.metricid + " | " + $cpustat2.value + $cpustat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $cpustat2.Timestamp)}
-	foreach($ramstat2 in $ramstats2){$text+=($ramstat2.uid -split "@" -split ":443")[1] + " | " + $ramstat2.entity + " | " + $ramstat2.metricid + " | " + $ramstat2.value + $ramstat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $ramstat2.Timestamp)}
-	foreach($latencystat2 in $latencystats2){$text+=($latencystat2.uid -split "@" -split ":443")[1] + " | " + $latencystat2.entity + " | " + $latencystat2.metricid + " | " + $latencystat2.value + $latencystat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $latencystat2.Timestamp)}
+	foreach($cpustat2 in $cpustats2)
+	{
+		$cpustat2vcenter = ($cpustat2.uid -split "@" -split ":443")[1]
+		$textadd = $cpustat2vcenter + " | " + $cpustat2.entity + " | " + $cpustat2.metricid + " | " + $cpustat2.value + $cpustat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $cpustat2.Timestamp)
+		$text+= $textadd
+		write-eventlog -log application -source $cpustat2vcenter -eventid 401 -entrytype warning -message $textadd
+	}
+	foreach($ramstat2 in $ramstats2)
+	{
+		$ramstat2vcenter = ($ramstat2.uid -split "@" -split ":443")[1]
+		$textadd = $ramstat2vcenter + " | " + $ramstat2.entity + " | " + $ramstat2.metricid + " | " + $ramstat2.value + $ramstat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $ramstat2.Timestamp)
+		$text+= $textadd
+		write-eventlog -log application -source $ramstat2vcenter -eventid 402 -entrytype warning -message $textadd
+	}
+	foreach($latencystat2 in $latencystats2)
+	{
+		$latencystat2vcenter = ($latencystat2.uid -split "@" -split ":443")[1]
+		$textadd = $latencystat2vcenter + " | " + $latencystat2.entity + " | " + $latencystat2.metricid + " | " + $latencystat2.value + $latencystat2.unit + " | " + (get-date -format yyyyMMdd_HH:mm:ss $latencystat2.Timestamp)
+		$text+= $textadd
+		write-eventlog -log application -source $latencystat2vcenter -eventid 403 -entrytype warning -message $textadd
+	}
 	foreach($nicnolink2 in $nicsnolink2)
 	{
 		$esxcli = Get-EsxCli -VMHost $nicnolink2.VMHost
@@ -85,17 +119,24 @@ if($cpustats2.count -gt 0 -or $ramstats2.count -gt 0 -or $latencystats2.count -g
 		{
 			$switch_nicnolink = ($esxcli.network.vswitch.standard.list() | ? {$_.uplinks -eq $nicnolink2.name}).name
 		}
-		$text+=($nicnolink2.uid -split "@" -split ":443")[1] + " | " + $nicnolink2.VMHost + " | " + $nicnolink2.name + " | " + $switch_nicnolink + " | BitRatePerSec:" + $nicnolink2.BitRatePerSec + " | FullDuplex:" + $nicnolink2.fullduplex
+		$nicnolink2vcenter = ($nicnolink2.uid -split "@" -split ":443")[1]
+		$textadd = $nicnolink2vcenter + " | " + $nicnolink2.VMHost + " | " + $nicnolink2.name + " | " + $switch_nicnolink + " | BitRatePerSec:" + $nicnolink2.BitRatePerSec + " | FullDuplex:" + $nicnolink2.fullduplex
+		$text+= $textadd
+		write-eventlog -log application -source $nicnolink2vcenter -eventid 404 -entrytype warning -message $textadd
 	}
 }
 
 #check esxi hosts <> connected
 
-$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,@{Name="vcenter";Expression={$vcenter}},Connectionstate,Powerstate | sort vcenter,name
+$hostsnotconnected = @()
+$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,uid,Connectionstate,Powerstate | sort uid,name
 foreach ($hostnotconnected in $hostsnotconnected)
 {
-	$text += $hostnotconnected.vcenter + " | " + $hostnotconnected.name + " | " + $hostnotconnected.connectionstate + " | " + $hostnotconnected.Powerstate 
-}	
+	$hostnotconnectedvcenter = ($hostnotconnected.uid -split "@" -split ":443")[1]
+	$textadd = $hostnotconnectedvcenter + " | " + $hostnotconnected.name + " | " + $hostnotconnected.connectionstate + " | " + $hostnotconnected.Powerstate 
+	$text+= $textadd
+	write-eventlog -log application -source $hostnotconnectedvcenter -eventid 405 -entrytype warning -message $textadd
+}
 
 $text = $text | sort
 write-host $text
