@@ -1,0 +1,235 @@
+#JORGE NAVARRO MANZANO Script vshields edge info,config and status
+#https://linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+#used lines of code to get vshield edges and health from https://fojta.wordpress.com/2015/03/02/how-to-monitor-health-of-nsx-edge-gateways/
+#states
+#green – good. This is the only state that guarantees that the Edge is functional.
+#red – no backing appliance is in service state
+#grey – unknown status (for example undeployed Edge)
+#yellow – intermittent health check failures (if more than 5 consecutive health checks fail the status goes to red)
+
+$error.clear()
+
+$nsxmanagers = @()
+$NSXManager1 = read-host("nsx manager 1 ip/hostname")
+$NSXManager2 = read-host("nsx manager 2 ip/hostname")
+$NSXManager3 = read-host("nsx manager 3 ip/hostname")
+$NSXManager4 = read-host("nsx manager 4 ip/hostname")
+$NSXManager5 = read-host("nsx manager 5 ip/hostname")
+$NSXManager6 = read-host("nsx manager 6 ip/hostname")
+if($NSXManager1 -ne "" -and $NSXManager1 -ne $null){$nsxmanagers += $NSXManager1};if($NSXManager2 -ne "" -and $NSXManager2 -ne $null){$nsxmanagers += $NSXManager2};if($NSXManager3 -ne "" -and $NSXManager3 -ne $null){$nsxmanagers += $NSXManager3}
+if($NSXManager4 -ne "" -and $NSXManager4 -ne $null){$nsxmanagers += $NSXManager4};if($NSXManager5 -ne "" -and $NSXManager5 -ne $null){$nsxmanagers += $NSXManager5};if($NSXManager6 -ne "" -and $NSXManager6 -ne $null){$nsxmanagers += $NSXManager6}
+$usernsx = read-host("username (admin) nsx manager")
+$passnsx = read-host("password nsx manager")
+
+$vcenters = @()
+$vcenter1 = read-host("vcenter 1 manager ip/hostname")
+$vcenter2 = read-host("vcenter 2 manager ip/hostname")
+$vcenter3 = read-host("vcenter 3 manager ip/hostname")
+$vcenter4 = read-host("vcenter 4 manager ip/hostname")
+$vcenter5 = read-host("vcenter 5 manager ip/hostname")
+$vcenter6 = read-host("vcenter 6 manager ip/hostname")
+if($vcenter1 -ne "" -and $vcenter1 -ne $null){$vcenters += $vcenter1};if($vcenter2 -ne "" -and $vcenter2 -ne $null){$vcenters += $vcenter2};if($vcenter3 -ne "" -and $vcenter3 -ne $null){$vcenters += $vcenter3}
+if($vcenter4 -ne "" -and $vcenter4 -ne $null){$vcenters += $vcenter4};if($vcenter5 -ne "" -and $vcenter5 -ne $null){$vcenters += $vcenter5};if($vcenter6 -ne "" -and $vcenter6 -ne $null){$vcenters += $vcenter6}
+$uservcenter = read-host("username vcenter")
+$passvcenter = read-host -assecurestring ("password vcenter")
+$cred = New-Object System.Management.Automation.PSCredential -ArgumentList $uservcenter,$passvcenter
+
+Connect-VIServer $vcenters -credential $cred
+
+$vms = get-vm
+
+### Ignore TLS/SSL errors
+add-type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCertsPolicy : ICertificatePolicy {
+public bool CheckValidationResult(
+ServicePoint srvPoint, X509Certificate certificate,
+WebRequest request, int certificateProblem) {
+return true;
+}
+}
+"@
+
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+### Create authorization string and store in $head
+$auth = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($usernsx + ":" + $passnsx))
+$head = @{"Authorization"="Basic $auth"}
+
+$filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv
+$filestatus.writeline("nsxmanager|vcenter|vmNameOfActiveVse|health|vmversion|host|dataStore|objectid|name")
+$fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv
+$fileconfig.writeline("nsxmanager|vcenter|name|health|nics|ips|size|dns|loadbalancer|ha|nat|ipsec|l2vpn|syslog|firewall|sslvpn|routing|dhcp")
+$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv
+$filenatrules.writeline("nsxmanager|vcenter|name|id|ruletag|description|action|vnic|loggingenabled|enabled|protocol|originaladdress|translatedaddress|originalport|translatedport")
+$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv
+$filefwrules.writeline("nsxmanager|vcenter|name|id|ruletag|name|enabled|loggingEnabled|action|source|sourceport|destination|application")
+$filestatus.close();$fileconfig.close();$filefwrules.close();$filenatrules.close()
+foreach($nsxmanager in $nsxmanagers)
+{
+	#get all edges and info
+	$requestedges = "https://$NSXManager/api/3.0/edges"
+	$redges = Invoke-WebRequest -Uri ($requestedges+"?startIndex=0&pageSize=1") -Headers $head -ContentType "application/xml" -ErrorAction:Stop
+	$TotalCount = ([xml]$redges).pagedEdgeList.edgePage.pagingInfo.totalCount
+	$redges = Invoke-WebRequest -Uri ($requestedges+"?startIndex=0&pageSize="+$TotalCount) -Headers $head -ContentType "application/xml" -ErrorAction:Stop
+	[xml]$rxmledges = $redges.Content
+	$Edges = @()
+	foreach ($EdgeSummary in $rxmledges.pagedEdgeList.edgePage.edgeSummary)
+	{
+		$e = "" | select vmNameOfActiveVse,objectId,nodeid,datacenterMoid,datacenterName,tenantId,numberOfConnectedVnics,vmversion,applianceSize,fqdn,numberOfDeployedVms,vmMoidOfActiveVse,hostNameOfActiveVse,resourcePoolNameOfActiveVse,dataStoreNameOfActiveVse,statusFromVseUpdatedOn,name
+		$e.objectId = $edgeSummary.objectId
+		$e.Name = $edgeSummary.Name
+		$e.vmNameOfActiveVse = $edgesummary.appliancesSummary.vmNameOfActiveVse
+		$e.nodeid = $edgeSummary.nodeid
+		$e.datacenterMoid = $edgeSummary.datacenterMoid
+		$e.datacenterName = $edgeSummary.datacenterName
+		$e.tenantId = $edgesummary.tenantId
+		$e.numberOfConnectedVnics = $edgesummary.numberOfConnectedVnics
+		$e.vmversion = $edgesummary.appliancesSummary.vmVersion
+		$e.applianceSize = $edgesummary.appliancesSummary.applianceSize
+		$e.fqdn = $edgesummary.appliancesSummary.fqdn
+		$e.numberOfDeployedVms = $edgesummary.appliancesSummary.numberOfDeployedVms
+		$e.vmMoidOfActiveVse = $edgesummary.appliancesSummary.vmMoidOfActiveVse
+		$e.hostNameOfActiveVse = $edgesummary.appliancesSummary.hostNameOfActiveVse
+		$e.resourcePoolNameOfActiveVse = $edgesummary.appliancesSummary.resourcePoolNameOfActiveVse
+		$e.dataStoreNameOfActiveVse = $edgesummary.appliancesSummary.dataStoreNameOfActiveVse
+		$e.statusFromVseUpdatedOn = $edgesummary.appliancesSummary.statusFromVseUpdatedOn
+		$Edges += $e
+	}
+	$nedges = $Edges.count
+	$edgesdone = 0
+	
+	foreach ($Edge in $Edges)
+	{
+		$edgeid = $Edge.objectid
+		$edgesdone = $edgesdone + 1
+		write-host $nsxmanager "Total:"$nedges" Actual:"$edgesdone
+		$vm = $vms | ? {$_.name -eq $edge.vmNameOfActiveVse}
+		$vcenter= ($vm.uid -split "@" -split ":443")[1]
+		$vmips = $vm.ExtensionData.Guest.net.ipaddress | ? {$_ -ne $null}
+		$ips = ""
+		foreach($vmip in $vmips)
+		{
+			$ips+=$vmip
+			if($vmips[$vmips.count -1] -ne $vmip -and $vmips.count -gt 1)
+			{
+				$ips+=","
+			}
+		}
+		#get edge config-health
+		$requesthealth = "https://$NSXManager/api/3.0/edges"+"/"+$edgeid+"/status"
+		$health = @{} | select Health, Detail
+		$rhealth = Invoke-WebRequest -Uri $requesthealth -Headers $head -ContentType "application/xml" -ErrorAction:Stop
+		[xml]$rxmlhealth = $rhealth.Content
+		$health.Health = $rxmlhealth.edgeStatus.edgeStatus
+		$hdetails = @()
+		foreach ($Feature in $rxmlhealth.edgeStatus.featureStatuses.featureStatus)
+		{
+			$h = @{} | select Service, Status
+			$h.Service = $Feature.service
+			if($Feature.status -eq "not_configured")
+			{
+				$h.Status = "notconf"
+			}
+			else
+			{
+				$h.Status = $Feature.status
+			}
+			$hdetails += $h
+		}
+		$health.Detail = $hdetails
+		$hdns = $health.detail.status[0];$hloadBalancer = $health.detail.status[1];$hhighAvailability = $health.detail.status[2];$hnat = $health.detail.status[3]
+		$hipsec = $health.detail.status[4];$hl2vpn = $health.detail.status[5];$hsyslog = $health.detail.status[6];$hfirewall = $health.detail.status[7]
+		$hsslvpn = $health.detail.status[8];$hrouting = $health.detail.status[9];$hdhcp = $health.detail.status[10]
+		
+		#get nat rules
+		$requestnatrules = "https://$NSXManager/api/3.0/edges"+"/"+$edgeid+"/nat/config"
+		$rnatrules = Invoke-WebRequest -Uri $requestnatrules -Headers $head -ContentType "application/xml" -ErrorAction:Stop
+		[xml]$rxmlnatrules = $rnatrules.Content
+		
+		if($rxmlnatrules.nat.enabled -eq $true)
+		{
+			$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv,[System.IO.FileMode]::Append
+			foreach($natrule in $rxmlnatrules.nat.natrules.natrule | ? {$_.ruleType -eq "user"})
+			{
+				$filenatrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $natrule.id +"|"+ $natrule.ruletag +"|"+ $natrule.description +"|"+ $natrule.action +"|"+ $natrule.vnic +"|"+ $natrule.loggingenabled +"|"+ $natrule.enabled +"|"+ $natrule.protocol +"|"+ $natrule.originaladdress +"|"+ $natrule.translatedaddress +"|"+ $natrule.originalport +"|"+ $natrule.translatedport)
+			}
+			$filenatrules.close()
+		}
+		
+		#get fw rules
+		$requestfwrules = "https://$NSXManager/api/3.0/edges"+"/"+$edgeid+"/firewall/config"
+
+		$rfwrules = Invoke-WebRequest -Uri $requestfwrules -Headers $head -ContentType "application/xml" -ErrorAction:Stop
+		[xml]$rxmlfwrules = $rfwrules.Content
+
+		$fwdef = "" | select enabled,defaultPolicy,action,loggingEnabled
+		$fwdef.enabled = $rxmlfwrules.firewall.enabled
+		$fwdef.defaultPolicy = $rxmlfwrules.firewall.defaultPolicy.name
+		$fwdef.action = $rxmlfwrules.firewall.defaultPolicy.action
+		$fwdef.loggingEnabled = $rxmlfwrules.firewall.defaultPolicy.loggingEnabled
+		$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv,[System.IO.FileMode]::Append
+		$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|default policy|"+ $fwdef.defaultPolicy +"|action|"+$fwdef.action+"|logginenabled"+$fwdef.loggingEnabled)
+
+		foreach($fwrule in $rxmlfwrules.firewall.firewallRules.firewallRule | ? {$_.ruleType -eq "user"})
+		{
+			$fwipsetsource="";$fwipsetdestination="";$fwapplication="";$fwruledestination="";$fwrulesource="";$fwruleapplication=""
+			if($fwrule.source -ne $null)
+			{
+				foreach($source in $fwrule.source)
+				{
+					$fwipsetsource = $source.innertext
+				}
+				if($fwipsetsource -like "*ipset*")
+				{
+					$fwrulesource = ([xml](Invoke-WebRequest -Uri "https://$nsxmanager/api/2.0/services/ipset/$fwipsetsource" -Headers $head -ContentType "application/xml" -ErrorAction:Stop).content).ipset.value
+				}
+				else
+				{
+					$fwrulesource = $fwipsetsource
+				}
+			}
+			else{$fwrulesource="any"}
+			if($fwrule.destination -ne $null)
+			{
+				foreach($destination in $fwrule.destination)
+				{
+					$fwipsetdestination = $destination.innertext
+				}
+				if($fwipsetdestination -like "*ipset*")
+				{
+					$fwruledest = ([xml](Invoke-WebRequest -Uri "https://$nsxmanager/api/2.0/services/ipset/$fwipsetdestination" -Headers $head -ContentType "application/xml" -ErrorAction:Stop).content).ipset.value
+				}
+				else
+				{
+					$fwruledest = $fwipsetdestination
+				}
+			}
+			else{$fwrulesource="any"}
+			if($fwrule.application -ne $null)
+			{
+				foreach($application in $fwrule.application)
+				{
+					$fwapplication = $application.innertext
+				}
+				$fwruleapp = ([xml](Invoke-WebRequest -Uri "https://$nsxmanager/api/2.0/services/application/$fwapplication" -Headers $head -ContentType "application/xml" -ErrorAction:Stop).content).application.name
+				$fwruleapp = ($fwruleapp -split "-")[1]
+			}
+			
+			$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $fwrule.id +"|"+ $fwrule.ruletag +"|"+ $fwrule.name +"|"+ $fwrule.enabled +"|"+ $fwrule.loggingEnabled +"|"+ $fwrule.action +"|"+ $fwrulesource +"|"+ $fwrule.sourceport +"|"+ $fwruledest +"|"+ $fwruleapp)
+		}
+		$filefwrules.close()
+		
+		$filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv,[System.IO.FileMode]::Append
+		$filestatus.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.vmNameOfActiveVse +"|"+ $health.health +"|"+ $edge.vmversion +"|"+ $edge.hostNameOfActiveVse +"|"+ $edge.dataStoreNameOfActiveVse +"|"+ $edge.objectid +"|"+ $edge.name)
+		$fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv,[System.IO.FileMode]::Append
+		$fileconfig.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $health.health +"|"+ $edge.numberOfConnectedVnics +"|"+ $ips +"|"+ $edge.applianceSize +"|"+ $hdns +"|"+ $hloadBalancer +"|"+ $hhighAvailability +"|"+ $hnat +"|"+ $hipsec +"|"+ $hl2vpn +"|"+ $hsyslog +"|"+ $hfirewall +"|"+ $hsslvpn +"|"+ $hrouting +"|"+ $hdhcp)
+		write-host("-----------")
+		$filestatus.close();$fileconfig.close();$filefwrules.close()
+		
+		write-host($nsxmanager +"|"+ $vcenter +"|"+ $edge.vmNameOfActiveVse +"|"+ $health.health +"|"+ $edge.vmversion +"|"+ $edge.hostNameOfActiveVse +"|"+ $edge.dataStoreNameOfActiveVse +"|"+ $edge.objectid +"|"+ $edge.name)
+		write-host("")
+	}
+}
+
