@@ -153,7 +153,7 @@ foreach($nsxmanager in $nsxmanagers)
 			$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv,[System.IO.FileMode]::Append
 			foreach($natrule in $rxmlnatrules.nat.natrules.natrule | ? {$_.ruleType -eq "user"})
 			{
-				$filenatrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $natrule.id +"|"+ $natrule.ruletag +"|"+ $natrule.description +"|"+ $natrule.action +"|"+ $natrule.vnic +"|"+ $natrule.loggingenabled +"|"+ $natrule.enabled +"|"+ $natrule.protocol +"|"+ $natrule.originaladdress +"|"+ $natrule.translatedaddress +"|"+ $natrule.originalport +"|"+ $natrule.translatedport)
+				$filenatrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $natrule.ruleid +"|"+ $natrule.ruletag +"|"+ $natrule.description +"|"+ $natrule.action +"|"+ $natrule.vnic +"|"+ $natrule.loggingenabled +"|"+ $natrule.enabled +"|"+ $natrule.protocol +"|"+ $natrule.originaladdress +"|"+ $natrule.translatedaddress +"|"+ $natrule.originalport +"|"+ $natrule.translatedport)
 			}
 			$filenatrules.close()
 		}
@@ -170,7 +170,7 @@ foreach($nsxmanager in $nsxmanagers)
 		$fwdef.action = $rxmlfwrules.firewall.defaultPolicy.action
 		$fwdef.loggingEnabled = $rxmlfwrules.firewall.defaultPolicy.loggingEnabled
 		$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv,[System.IO.FileMode]::Append
-		$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|default policy|"+ $fwdef.defaultPolicy +"|action|"+$fwdef.action+"|logginenabled"+$fwdef.loggingEnabled)
+		$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|default policy "+ $fwdef.defaultPolicy +" action "+$fwdef.action+" logginenabled "+$fwdef.loggingEnabled)
 
 		foreach($fwrule in $rxmlfwrules.firewall.firewallRules.firewallRule | ? {$_.ruleType -eq "user"})
 		{
