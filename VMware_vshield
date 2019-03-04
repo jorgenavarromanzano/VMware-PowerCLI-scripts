@@ -58,13 +58,13 @@ $auth = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($
 $head = @{"Authorization"="Basic $auth"}
 
 $filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv
-$filestatus.writeline("nsxmanager|vcenter|vmNameOfActiveVse|health|vmversion|host|dataStore|objectid|name")
+$filestatus.writeline("nsxmanager;vcenter;vmNameOfActiveVse;health;vmversion;host;dataStore;objectid;name")
 $fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv
-$fileconfig.writeline("nsxmanager|vcenter|name|health|nics|ips|size|dns|loadbalancer|ha|nat|ipsec|l2vpn|syslog|firewall|sslvpn|routing|dhcp")
+$fileconfig.writeline("nsxmanager;vcenter;name;health;nics;ips;size;dns;loadbalancer;ha;nat;ipsec;l2vpn;syslog;firewall;sslvpn;routing;dhcp")
 $filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv
-$filenatrules.writeline("nsxmanager|vcenter|name|id|ruletag|description|action|vnic|loggingenabled|enabled|protocol|originaladdress|translatedaddress|originalport|translatedport")
+$filenatrules.writeline("nsxmanager;vcenter;name;id;ruletag;description;action;vnic;loggingenabled;enabled;protocol;originaladdress;translatedaddress;originalport;translatedport")
 $filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv
-$filefwrules.writeline("nsxmanager|vcenter|name|id|ruletag|name|enabled|loggingEnabled|action|source|sourceport|destination|application")
+$filefwrules.writeline("nsxmanager;vcenter;name;id;ruletag;name;enabled;loggingEnabled;action;source;sourceport;destination;application")
 $filestatus.close();$fileconfig.close();$filefwrules.close();$filenatrules.close()
 foreach($nsxmanager in $nsxmanagers)
 {
@@ -153,7 +153,7 @@ foreach($nsxmanager in $nsxmanagers)
 			$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv,[System.IO.FileMode]::Append
 			foreach($natrule in $rxmlnatrules.nat.natrules.natrule | ? {$_.ruleType -eq "user"})
 			{
-				$filenatrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $natrule.ruleid +"|"+ $natrule.ruletag +"|"+ $natrule.description +"|"+ $natrule.action +"|"+ $natrule.vnic +"|"+ $natrule.loggingenabled +"|"+ $natrule.enabled +"|"+ $natrule.protocol +"|"+ $natrule.originaladdress +"|"+ $natrule.translatedaddress +"|"+ $natrule.originalport +"|"+ $natrule.translatedport)
+				$filenatrules.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +";"+ $natrule.ruleid +";"+ $natrule.ruletag +";"+ $natrule.description +";"+ $natrule.action +";"+ $natrule.vnic +";"+ $natrule.loggingenabled +";"+ $natrule.enabled +";"+ $natrule.protocol +";"+ $natrule.originaladdress +";"+ $natrule.translatedaddress +";"+ $natrule.originalport +";"+ $natrule.translatedport)
 			}
 			$filenatrules.close()
 		}
@@ -170,7 +170,7 @@ foreach($nsxmanager in $nsxmanagers)
 		$fwdef.action = $rxmlfwrules.firewall.defaultPolicy.action
 		$fwdef.loggingEnabled = $rxmlfwrules.firewall.defaultPolicy.loggingEnabled
 		$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv,[System.IO.FileMode]::Append
-		$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|default policy "+ $fwdef.defaultPolicy +" action "+$fwdef.action+" logginenabled "+$fwdef.loggingEnabled)
+		$filefwrules.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +"; "+ $fwdef.defaultPolicy +" action "+$fwdef.action+" logginenabled "+$fwdef.loggingEnabled)
 
 		foreach($fwrule in $rxmlfwrules.firewall.firewallRules.firewallRule | ? {$_.ruleType -eq "user"})
 		{
@@ -217,18 +217,18 @@ foreach($nsxmanager in $nsxmanagers)
 				$fwruleapp = ($fwruleapp -split "-")[1]
 			}
 			
-			$filefwrules.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $fwrule.id +"|"+ $fwrule.ruletag +"|"+ $fwrule.name +"|"+ $fwrule.enabled +"|"+ $fwrule.loggingEnabled +"|"+ $fwrule.action +"|"+ $fwrulesource +"|"+ $fwrule.sourceport +"|"+ $fwruledest +"|"+ $fwruleapp)
+			$filefwrules.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +";"+ $fwrule.id +";"+ $fwrule.ruletag +";"+ $fwrule.name +";"+ $fwrule.enabled +";"+ $fwrule.loggingEnabled +";"+ $fwrule.action +";"+ $fwrulesource +";"+ $fwrule.sourceport +";"+ $fwruledest +";"+ $fwruleapp)
 		}
 		$filefwrules.close()
 		
 		$filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv,[System.IO.FileMode]::Append
-		$filestatus.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.vmNameOfActiveVse +"|"+ $health.health +"|"+ $edge.vmversion +"|"+ $edge.hostNameOfActiveVse +"|"+ $edge.dataStoreNameOfActiveVse +"|"+ $edge.objectid +"|"+ $edge.name)
+		$filestatus.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.dataStoreNameOfActiveVse +";"+ $edge.objectid +";"+ $edge.name)
 		$fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv,[System.IO.FileMode]::Append
-		$fileconfig.writeline($nsxmanager +"|"+ $vcenter +"|"+ $edge.name +"|"+ $health.health +"|"+ $edge.numberOfConnectedVnics +"|"+ $ips +"|"+ $edge.applianceSize +"|"+ $hdns +"|"+ $hloadBalancer +"|"+ $hhighAvailability +"|"+ $hnat +"|"+ $hipsec +"|"+ $hl2vpn +"|"+ $hsyslog +"|"+ $hfirewall +"|"+ $hsslvpn +"|"+ $hrouting +"|"+ $hdhcp)
+		$fileconfig.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +";"+ $health.health +";"+ $edge.numberOfConnectedVnics +";"+ $ips +";"+ $edge.applianceSize +";"+ $hdns +";"+ $hloadBalancer +";"+ $hhighAvailability +";"+ $hnat +";"+ $hipsec +";"+ $hl2vpn +";"+ $hsyslog +";"+ $hfirewall +";"+ $hsslvpn +";"+ $hrouting +";"+ $hdhcp)
 		write-host("-----------")
 		$filestatus.close();$fileconfig.close();$filefwrules.close()
 		
-		write-host($nsxmanager +"|"+ $vcenter +"|"+ $edge.vmNameOfActiveVse +"|"+ $health.health +"|"+ $edge.vmversion +"|"+ $edge.hostNameOfActiveVse +"|"+ $edge.dataStoreNameOfActiveVse +"|"+ $edge.objectid +"|"+ $edge.name)
+		write-host($nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.dataStoreNameOfActiveVse +";"+ $edge.objectid +";"+ $edge.name)
 		write-host("")
 	}
 }
