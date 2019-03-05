@@ -1,4 +1,4 @@
-#JORGE NAVARRO MANZANO Script vshields edge info,status,config,fwrules,natrules
+#JORGE NAVARRO MANZANO Script vshield edge info,status,config,fwrules,natrules
 #https://linkedin.com/in/jorgenavarromanzano
 #more scripts here https://github.com/jorgenavarromanzano
 #used lines of code to get vshield edges and health from https://fojta.wordpress.com/2015/03/02/how-to-monitor-health-of-nsx-edge-gateways/
@@ -8,32 +8,66 @@
 #grey – unknown status (for example undeployed Edge)
 #yellow – intermittent health check failures (if more than 5 consecutive health checks fail the status goes to red)
 
+#use it with parameters like .\vshield.ps1 -nsxmanager1 "ipaddress1" -nsxmanager2 "ipaddress2" -nsxmanagerx "ipaddressx" -usernsx "admin" -passnsx "passwordnsx" -vcenter1 "ipvcenter1" -vcenter2 "ipvcenter2" -vcenterx "ipvcenterx" -uservcenter "admvc" -passvcenter "passvc" -destemail "email@email.com" -origemail "email@email.com" -smtpserver "smtp.enterprise.local"
+#or the script will ask for any variable/nsxmanager/vcenter etc
+param($NSXManager1,$NSXManager2,$NSXManager3,$NSXManager4,$NSXManager5,$NSXManager6,$usernsx,$passnsx,$vcenter1,$vcenter2,$vcenter3,$vcenter4,$vcenter5,$vcenter6,$uservcenter,$passvcenter,$destemail,$origemail,$smtpserver)
 $error.clear()
 
+#change this variables to your emails and smtpserver:
+if($destemail -eq $null)
+{
+	$destemail = "tso.sspp3@telefonica.com"
+}
+if($origemail -eq $null)
+{
+	$origemail = "vmwarepowercli@telefonica.es"
+}
+if($smtpserver -eq $null)
+{
+	$smtpserver = "localhost"
+}
+
+Start-Transcript log.txt -append
+$vshieldswerror = @()
+
+#if there is no parameter for nsxmanager1 then it will ask for all the variables
 $nsxmanagers = @()
-$NSXManager1 = read-host("nsx manager 1 ip/hostname")
-$NSXManager2 = read-host("nsx manager 2 ip/hostname")
-$NSXManager3 = read-host("nsx manager 3 ip/hostname")
-$NSXManager4 = read-host("nsx manager 4 ip/hostname")
-$NSXManager5 = read-host("nsx manager 5 ip/hostname")
-$NSXManager6 = read-host("nsx manager 6 ip/hostname")
+if($NSXManager1 -eq $null)
+{
+	$NSXManager1 = read-host("nsx manager 1 ip/hostname")
+	$NSXManager2 = read-host("nsx manager 2 ip/hostname")
+	$NSXManager3 = read-host("nsx manager 3 ip/hostname")
+	$NSXManager4 = read-host("nsx manager 4 ip/hostname")
+	$NSXManager5 = read-host("nsx manager 5 ip/hostname")
+	$NSXManager6 = read-host("nsx manager 6 ip/hostname")
+	$usernsx = read-host("username (admin) nsx manager")
+	$passnsx = read-host("password nsx manager")
+}
 if($NSXManager1 -ne "" -and $NSXManager1 -ne $null){$nsxmanagers += $NSXManager1};if($NSXManager2 -ne "" -and $NSXManager2 -ne $null){$nsxmanagers += $NSXManager2};if($NSXManager3 -ne "" -and $NSXManager3 -ne $null){$nsxmanagers += $NSXManager3}
 if($NSXManager4 -ne "" -and $NSXManager4 -ne $null){$nsxmanagers += $NSXManager4};if($NSXManager5 -ne "" -and $NSXManager5 -ne $null){$nsxmanagers += $NSXManager5};if($NSXManager6 -ne "" -and $NSXManager6 -ne $null){$nsxmanagers += $NSXManager6}
-$usernsx = read-host("username (admin) nsx manager")
-$passnsx = read-host("password nsx manager")
+write-host $nsxmanagers
 
+#if there is no parameter for vcenter1 then it will ask for all the variables
 $vcenters = @()
-$vcenter1 = read-host("vcenter 1 manager ip/hostname")
-$vcenter2 = read-host("vcenter 2 manager ip/hostname")
-$vcenter3 = read-host("vcenter 3 manager ip/hostname")
-$vcenter4 = read-host("vcenter 4 manager ip/hostname")
-$vcenter5 = read-host("vcenter 5 manager ip/hostname")
-$vcenter6 = read-host("vcenter 6 manager ip/hostname")
+if($vcenter1 -eq $null)
+{
+	$vcenter1 = read-host("vcenter 1 manager ip/hostname")
+	$vcenter2 = read-host("vcenter 2 manager ip/hostname")
+	$vcenter3 = read-host("vcenter 3 manager ip/hostname")
+	$vcenter4 = read-host("vcenter 4 manager ip/hostname")
+	$vcenter5 = read-host("vcenter 5 manager ip/hostname")
+	$vcenter6 = read-host("vcenter 6 manager ip/hostname")
+	$uservcenter = read-host("username vcenter")
+	$passvcenter = read-host -assecurestring ("password vcenter")
+}
+else
+{
+	$passvcenter = convertto-securestring $passvcenter -AsPlainText -force
+}
 if($vcenter1 -ne "" -and $vcenter1 -ne $null){$vcenters += $vcenter1};if($vcenter2 -ne "" -and $vcenter2 -ne $null){$vcenters += $vcenter2};if($vcenter3 -ne "" -and $vcenter3 -ne $null){$vcenters += $vcenter3}
 if($vcenter4 -ne "" -and $vcenter4 -ne $null){$vcenters += $vcenter4};if($vcenter5 -ne "" -and $vcenter5 -ne $null){$vcenters += $vcenter5};if($vcenter6 -ne "" -and $vcenter6 -ne $null){$vcenters += $vcenter6}
-$uservcenter = read-host("username vcenter")
-$passvcenter = read-host -assecurestring ("password vcenter")
 $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $uservcenter,$passvcenter
+write-host $vcenters
 
 Connect-VIServer $vcenters -credential $cred
 
@@ -123,6 +157,10 @@ foreach($nsxmanager in $nsxmanagers)
 		$rhealth = Invoke-WebRequest -Uri $requesthealth -Headers $head -ContentType "application/xml" -ErrorAction:Stop
 		[xml]$rxmlhealth = $rhealth.Content
 		$health.Health = $rxmlhealth.edgeStatus.edgeStatus
+		if($health.health -ne "GREEN")
+		{
+			$vshieldswerror += $nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.dataStoreNameOfActiveVse +";"+ $edge.objectid
+		}
 		$hdetails = @()
 		foreach ($Feature in $rxmlhealth.edgeStatus.featureStatuses.featureStatus)
 		{
@@ -233,3 +271,30 @@ foreach($nsxmanager in $nsxmanagers)
 	}
 }
 
+if($vshieldswerror.count -gt 0)
+{
+	$vshieldswerror = $vshieldswerror | sort
+	$vshieldswerror = Out-String -Inputobject $vshieldswerror
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info" -body $vshieldswerror -smtpServer $smtpserver
+}
+else
+{
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info with errors review body" -body $vshieldswerror -smtpServer $smtpserver
+}
+
+if($error.count -gt 0)
+{
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields, execution error" -body $errors -smtpServer $smtpserver
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
