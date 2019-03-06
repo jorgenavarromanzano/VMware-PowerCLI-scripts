@@ -9,6 +9,7 @@
 #yellow – intermittent health check failures (if more than 5 consecutive health checks fail the status goes to red)
 
 #use it with parameters like .\vshield.ps1 -nsxmanager1 "ipaddress1" -nsxmanager2 "ipaddress2" -nsxmanagerx "ipaddressx" -usernsx "admin" -passnsx "passwordnsx" -vcenter1 "ipvcenter1" -vcenter2 "ipvcenter2" -vcenterx "ipvcenterx" -uservcenter "admvc" -passvcenter "passvc" -destemail "email@email.com" -origemail "email@email.com" -smtpserver "smtp.enterprise.local"
+#as a task like powershell -file vshield.ps1 -nsxmanager1 "ipaddress1" -nsxmanager2 "ipaddress2" etc.
 #or the script will ask for any variable/nsxmanager/vcenter etc
 param($NSXManager1,$NSXManager2,$NSXManager3,$NSXManager4,$NSXManager5,$NSXManager6,$usernsx,$passnsx,$vcenter1,$vcenter2,$vcenter3,$vcenter4,$vcenter5,$vcenter6,$uservcenter,$passvcenter,$destemail,$origemail,$smtpserver)
 $error.clear()
@@ -91,13 +92,19 @@ return true;
 $auth = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($usernsx + ":" + $passnsx))
 $head = @{"Authorization"="Basic $auth"}
 
-$filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv
+$date = get-date -format yyyyMMdd
+if(!(Test-Path .\output))
+{
+	mkdir .\output
+}
+
+$filestatus = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldstatus.csv
 $filestatus.writeline("nsxmanager;vcenter;vmNameOfActiveVse;health;vmversion;host;dataStore;objectid;name")
-$fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv
+$fileconfig = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldconfig.csv
 $fileconfig.writeline("nsxmanager;vcenter;name;health;nics;ips;size;dns;loadbalancer;ha;nat;ipsec;l2vpn;syslog;firewall;sslvpn;routing;dhcp")
-$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv
+$filenatrules = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldnatrules.csv
 $filenatrules.writeline("nsxmanager;vcenter;name;id;ruletag;description;action;vnic;loggingenabled;enabled;protocol;originaladdress;translatedaddress;originalport;translatedport")
-$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv
+$filefwrules = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldfwrules.csv
 $filefwrules.writeline("nsxmanager;vcenter;name;id;ruletag;name;enabled;loggingEnabled;action;source;sourceport;destination;application")
 $filestatus.close();$fileconfig.close();$filefwrules.close();$filenatrules.close()
 foreach($nsxmanager in $nsxmanagers)
@@ -159,7 +166,7 @@ foreach($nsxmanager in $nsxmanagers)
 		$health.Health = $rxmlhealth.edgeStatus.edgeStatus
 		if($health.health -ne "GREEN")
 		{
-			$vshieldswerror += $nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.dataStoreNameOfActiveVse +";"+ $edge.objectid
+			$vshieldswerror += $nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.objectid
 		}
 		$hdetails = @()
 		foreach ($Feature in $rxmlhealth.edgeStatus.featureStatuses.featureStatus)
@@ -188,7 +195,7 @@ foreach($nsxmanager in $nsxmanagers)
 		
 		if($rxmlnatrules.nat.enabled -eq $true)
 		{
-			$filenatrules = New-Object System.IO.StreamWriter $pwd"\"vshieldnatrules.csv,[System.IO.FileMode]::Append
+			$filenatrules = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldnatrules.csv,[System.IO.FileMode]::Append
 			foreach($natrule in $rxmlnatrules.nat.natrules.natrule | ? {$_.ruleType -eq "user"})
 			{
 				$filenatrules.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +";"+ $natrule.ruleid +";"+ $natrule.ruletag +";"+ $natrule.description +";"+ $natrule.action +";"+ $natrule.vnic +";"+ $natrule.loggingenabled +";"+ $natrule.enabled +";"+ $natrule.protocol +";"+ $natrule.originaladdress +";"+ $natrule.translatedaddress +";"+ $natrule.originalport +";"+ $natrule.translatedport)
@@ -207,7 +214,7 @@ foreach($nsxmanager in $nsxmanagers)
 		$fwdef.defaultPolicy = $rxmlfwrules.firewall.defaultPolicy.name
 		$fwdef.action = $rxmlfwrules.firewall.defaultPolicy.action
 		$fwdef.loggingEnabled = $rxmlfwrules.firewall.defaultPolicy.loggingEnabled
-		$filefwrules = New-Object System.IO.StreamWriter $pwd"\"vshieldfwrules.csv,[System.IO.FileMode]::Append
+		$filefwrules = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldfwrules.csv,[System.IO.FileMode]::Append
 		$filefwrules.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +"; "+ $fwdef.defaultPolicy +" action "+$fwdef.action+" logginenabled "+$fwdef.loggingEnabled)
 
 		foreach($fwrule in $rxmlfwrules.firewall.firewallRules.firewallRule | ? {$_.ruleType -eq "user"})
@@ -259,9 +266,9 @@ foreach($nsxmanager in $nsxmanagers)
 		}
 		$filefwrules.close()
 		
-		$filestatus = New-Object System.IO.StreamWriter $pwd"\"vshieldstatus.csv,[System.IO.FileMode]::Append
+		$filestatus = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldstatus.csv,[System.IO.FileMode]::Append
 		$filestatus.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.vmNameOfActiveVse +";"+ $health.health +";"+ $edge.vmversion +";"+ $edge.hostNameOfActiveVse +";"+ $edge.dataStoreNameOfActiveVse +";"+ $edge.objectid +";"+ $edge.name)
-		$fileconfig = New-Object System.IO.StreamWriter $pwd"\"vshieldconfig.csv,[System.IO.FileMode]::Append
+		$fileconfig = New-Object System.IO.StreamWriter $pwd"\output\$date"_vshieldconfig.csv,[System.IO.FileMode]::Append
 		$fileconfig.writeline($nsxmanager +";"+ $vcenter +";"+ $edge.name +";"+ $health.health +";"+ $edge.numberOfConnectedVnics +";"+ $ips +";"+ $edge.applianceSize +";"+ $hdns +";"+ $hloadBalancer +";"+ $hhighAvailability +";"+ $hnat +";"+ $hipsec +";"+ $hl2vpn +";"+ $hsyslog +";"+ $hfirewall +";"+ $hsslvpn +";"+ $hrouting +";"+ $hdhcp)
 		write-host("-----------")
 		$filestatus.close();$fileconfig.close();$filefwrules.close()
@@ -275,11 +282,11 @@ if($vshieldswerror.count -gt 0)
 {
 	$vshieldswerror = $vshieldswerror | sort
 	$vshieldswerror = Out-String -Inputobject $vshieldswerror
-	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info" -body $vshieldswerror -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info with errors review body" -body $vshieldswerror -Attachments ".\output\$date_vshieldstatus.csv",".\output\$date_vshieldconfig.csv",".\output\$date_vshieldnatrules.csv",".\output\$date_vshieldfwrules.csv" -smtpServer $smtpserver
 }
 else
 {
-	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info with errors review body" -body $vshieldswerror -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info" -body $vshieldswerror -Attachments ".\output\$date_vshieldstatus.csv",".\output\$date_vshieldconfig.csv",".\output\$date_vshieldnatrules.csv",".\output\$date_vshieldfwrules.csv" -smtpServer $smtpserver
 }
 
 if($error.count -gt 0)
