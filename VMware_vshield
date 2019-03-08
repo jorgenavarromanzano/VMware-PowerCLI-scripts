@@ -17,11 +17,11 @@ $error.clear()
 #change this variables to your emails and smtpserver:
 if($destemail -eq $null)
 {
-	$destemail = "tso.sspp3@telefonica.com"
+	$destemail = "email@company.com"
 }
 if($origemail -eq $null)
 {
-	$origemail = "vmwarepowercli@telefonica.es"
+	$origemail = "vmwarepowercli@company.com"
 }
 if($smtpserver -eq $null)
 {
@@ -278,15 +278,17 @@ foreach($nsxmanager in $nsxmanagers)
 	}
 }
 
+$attachs = Get-Item .\output\$date*.csv
+
 if($vshieldswerror.count -gt 0)
 {
 	$vshieldswerror = $vshieldswerror | sort
 	$vshieldswerror = Out-String -Inputobject $vshieldswerror
-	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info with errors review body" -body $vshieldswerror -Attachments ".\output\$date_vshieldstatus.csv",".\output\$date_vshieldconfig.csv",".\output\$date_vshieldnatrules.csv",".\output\$date_vshieldfwrules.csv" -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info with errors review body" -body $vshieldswerror -Attachments $attachs -smtpServer $smtpserver
 }
 else
 {
-	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info" -body $vshieldswerror -Attachments ".\output\$date_vshieldstatus.csv",".\output\$date_vshieldconfig.csv",".\output\$date_vshieldnatrules.csv",".\output\$date_vshieldfwrules.csv" -smtpServer $smtpserver
+	send-mailmessage -from $origemail -to $destemail -subject "VMware vshields info" -body $vshieldswerror -Attachments $attachs -smtpServer $smtpserver
 }
 
 if($error.count -gt 0)
