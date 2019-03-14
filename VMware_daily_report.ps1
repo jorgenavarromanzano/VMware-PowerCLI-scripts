@@ -16,13 +16,12 @@
 #change $hours
 
 #change this variables to your emails and smtpserver:
-$destemail = "tso.sspp3@mail.com"
-$origemail = "vmwarepowercli@mail.es"
+$destemail = "mail@mail.com"
+$origemail = "mail@mail.com"
 $smtpserver = "localhost"
+
 $hours = 25
 $datebegin = get-date -format yyyyMMdd
-
-$error.clear()
 
 function Get-VIEventPlus {
 <#   
@@ -212,51 +211,43 @@ function Get-MotionHistory {
   }
 }
 
+$error.clear()
+
 Start-Transcript log.txt -append
 $vcenters = @()
 $vcenters = Get-Content -Path ..\vcenters.txt
-$vcenters += "vdc-vcsalres01.vdc.adm"
-$vcenters += "vdc-vcsalres02.vdc.adm"
-$vcenters += "vdc-vcsjcres01.vdc.adm"
-$vcenters += "vdc-vcsjcres02.vdc.adm"
-$vcenters += "vdc-vcsalmgt01.vdc.adm"
-$vcenters += "vdc-vcsjcmgt01.vdc.adm"
-$vcenters += "vcenter01.vmware.adm"
-$vcenters += "vcenter02.vmware.adm"
 $credentials = Get-Content -Path ..\credentials.txt
 $user = ($credentials -split ",")[0]
 $password = ($credentials -split ",")[1]
 
 $hostsnotconnectedmail = @()
-$texto = @()
-$texto += "------------------------------------------"
+$hostsnotconnectedmail += "------------------------------------------"
+$hostsnotconnectedmail += "HOSTS NOT CONNECTED:"
+$text = @()
+$text += "------------------------------------------"
 
 foreach ($vcenter in $vcenters)
 {
-	#ERRORS-WARNINGS
-	$texto+="           " + $vcenter
+	$text+="           " + $vcenter
 	write-host "           " + $vcenter
-	if($vcenter -like "*vdc*")
+	Connect-VIServer $vcenter -User $user -Password $password
+	#HOSTS-NotConnected
+	$hostsnotconnected = @()
+	$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,@{Name="vcenter";Expression={$vcenter}},Connectionstate,Powerstate | sort vcenter,name
+	foreach ($hostnotconnected in $hostsnotconnected)
 	{
-		Connect-VIServer $vcenter -User "VDC\powercli" -Password "Password01"
+		$hostsnotconnectedmail += $hostnotconnected.vcenter + " | " + $hostnotconnected.name + " | " + $hostnotconnected.connectionstate + " | " + $hostnotconnected.Powerstate 
 	}
-	elseif($vcenter -like "*vmware.adm*")
-	{
-		Connect-VIServer $vcenter -User "powercli" -Password "Password01"
-	}
-	else
-	{
-		Connect-VIServer $vcenter -User $user -Password $password
-	}
+	#ERRORS-WARNINGS
 	$errors_warnings = get-vievent -Types Error,Warning -Start (get-date).addhours(-$hours)
-	$texto += $vcenter + "_errors/warnings: | " + $errors_warnings.count + " **********"
+	$text += $vcenter + "_errors/warnings: | " + $errors_warnings.count + " **********"
 	write-host $vcenter + "_errors/warnings: | " + $errors_warnings.count + " **********"
 	$errors_warnings | %{
 		$dateew = $_.CreatedTime.ToString()
 		$mensaje = $_.fullFormattedMessage
 		$nodo = $_.host.name
 		write-host $vcenter + " | " + $dateew + " | " + $nodo + " | " + $mensaje
-		$texto += $vcenter + " | " + $dateew + " | " + $nodo + " | " + $mensaje + "`n"
+		$text += $vcenter + " | " + $dateew + " | " + $nodo + " | " + $mensaje + "`n"
 	}
 	#ALARMS
 	$objetos = @()
@@ -279,7 +270,7 @@ foreach ($vcenter in $vcenters)
 	$objetos += Get-View -ViewType VirtualMachine -Property Name,OverallStatus,TriggeredAlarmstate -filter @{"OverallStatus"="red"}
 	$objetos += Get-View -ViewType VirtualMachine -Property Name,OverallStatus,TriggeredAlarmstate -filter @{"OverallStatus"="yellow"}
 
-	$texto += $vcenter + "_alarms: | " + $objetos.triggeredalarmstate.count + " **********"
+	$text += $vcenter + "_alarms: | " + $objetos.triggeredalarmstate.count + " **********"
 	write-host $vcenter + "_alarms: | " + $objetos.triggeredalarmstate.count + " **********"
 	
 	if($objetos.count -gt 0)
@@ -294,7 +285,7 @@ foreach ($vcenter in $vcenters)
 				Add-Member -InputObject $object NoteProperty Alarmas ("$(Get-AlarmDefinition -Id $alarmaID)")
 				Add-Member -InputObject $object NoteProperty Estado $alarma.OverAllStatus
 				Add-Member -InputObject $object NoteProperty Fecha $alarma.Time.tostring()
-				$texto += $object.Name + " | " + $object.Alarmas + " | " + $object.Estado + " | " + $object.Fecha
+				$text += $object.Name + " | " + $object.Alarmas + " | " + $object.Estado + " | " + $object.Fecha
 				write-host $object.Name + " | " + $object.Alarmas + " | " + $object.Estado + " | " + $object.Fecha
 			}
 		}
@@ -304,41 +295,32 @@ foreach ($vcenter in $vcenters)
 	foreach ($cluster in $clusters)
 	{
 		$vmotions = get-cluster $cluster | Get-MotionHistory -Hours $hours -Recurse:$true
-		$texto += $vcenter +"_" + $cluster.name + "_vmotions_"+$datebegin+": | " + $vmotions.count + " **********"
+		$text += $vcenter +"_" + $cluster.name + "_vmotions_"+$datebegin+": | " + $vmotions.count + " **********"
 		write-host $vcenter +"_" + $cluster.name + "_vmotions_"+$datebegin+": | " + $vmotions.count + " **********"
 		foreach ($vmotion in $vmotions)
 		{
-			$texto += ($vmotion.CreatedTime.addhours(1)).tostring() + " | " + $vmotion.VM + " | " + $vmotion.UserName + " | srcHost:" + $vmotion.SrcVMHost + "|  dstHost:" + $vmotion.TgtVMHost + " | " + $vmotion.Type + " | srcLUN:" + $vmotion.SrcDatastore + " | dstLUN:" + $vmotion.TgtDatastore
+			$text += ($vmotion.CreatedTime.addhours(1)).tostring() + " | " + $vmotion.VM + " | " + $vmotion.UserName + " | srcHost:" + $vmotion.SrcVMHost + "|  dstHost:" + $vmotion.TgtVMHost + " | " + $vmotion.Type + " | srcLUN:" + $vmotion.SrcDatastore + " | dstLUN:" + $vmotion.TgtDatastore
 			write-host ($vmotion.CreatedTime.addhours(1)).tostring() + " | " + $vmotion.VM + " | " + $vmotion.UserName + " | srcHost:" + $vmotion.SrcVMHost + " | dstHost:" + $vmotion.TgtVMHost + " | " + $vmotion.Type + " | srcLUN:" + $vmotion.SrcDatastore + " | dstLUN:" + $vmotion.TgtDatastore
 		}
 	}
 	#latency events (number of events with latency increased in each vcenter)
 	$latencyevents = Get-VIEventPlus -EventType "esx.problem.scsi.device.io.latency.high" -Start (get-date).addhours(-$hours)
-	$texto += $vcenter + "_latencyevents_" + $datebegin + ": | " + $latencyevents.count + " **********"
+	$text += $vcenter + "_latencyevents_" + $datebegin + ": | " + $latencyevents.count + " **********"
 	write-host $vcenter + "_latencyevents_" + $datebegin + ": | " + $latencyevents.count + " **********"
-	$texto += "------------------------------------------"
+	$text += "------------------------------------------"
 	write-host "------------------------------------------"
-	
-	#HOSTS-NotConnected
-	$hostsnotconnected = @()
-	$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,@{Name="vcenter";Expression={$vcenter}},Connectionstate,Powerstate | sort vcenter,name
-	foreach ($hostnotconnected in $hostsnotconnected)
-	{
-		$hostsnotconnectedmail += $hostnotconnected.vcenter + " | " + $hostnotconnected.name + " | " + $hostnotconnected.connectionstate + " | " + $hostnotconnected.Powerstate 
-	}
 	
 	Disconnect-VIServer $vcenter -confirm:$false
 }
 
-$texto += "HOSTS NOT CONNECTED:"
-$texto += $hostsnotconnectedmail
-$texto += "------------------------------------------"
-$texto = Out-String -Inputobject $texto
+$textmail = $hostsnotconnectedmail + $text
+
+$textmail = Out-String -Inputobject $textmail
 $asunto = "VMware PowerCLI daily report " + $datebegin
 
-write-host $texto
+write-host $textmail
 
-send-mailmessage -from $origemail -to $destemail -subject $asunto -body $texto -smtpServer $smtpserver
+send-mailmessage -from $origemail -to $destemail -subject $asunto -body $textmail -smtpServer $smtpserver
 
 if($error.count -gt 0)
 {
