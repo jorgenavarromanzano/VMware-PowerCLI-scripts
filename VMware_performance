@@ -227,7 +227,7 @@ if($type -eq "vm")
 			$int1 = $int[0].timestamp
 			$int2 = $int[1].timestamp
 			$difs = ($int1 - $int2).totalseconds
-			$node.CPUreadymax = [int](((($node.CPUreadymax) / ($difs * 1000) ) * 100) / $node.CPUnum);$node.CPUreadyavg = [int](((($node.CPUreadyavg) / ($difs * 1000) ) * 100) / $node.CPUnum)
+			$node.CPUreadymax = [int](((($cpuready.maximum) / ($difs * 1000) ) * 100) / $node.CPUnum);$node.CPUreadyavg = [int](((($cpuready.average) / ($difs * 1000) ) * 100) / $node.CPUnum)
 			$discousostat = get-stat -entity $VM -Start $Start -Finish $Finish -Stat "disk.usage.average" | Measure-Object -Property Value -Average -maximum
 			$node.DiskmaxMB = "{0:N0}" -f $($discousostat.maximum/1024)
 			$node.DiskavgMB = "{0:N0}" -f $($discousostat.average/1024)
