@@ -1,16 +1,30 @@
-$destemail = "tso.sspp3@mail.com"
-$origemail = "vmwarepowercli@mail.es"
+#JORGE NAVARRO MANZANO Script VMware dead paths
+#checks all paths to all datastores searching dead paths, disabled, or odd numbers
+#https://es.linkedin.com/in/jorgenavarromanzano
+#more scripts here https://github.com/jorgenavarromanzano
+
+#Instructions:
+#create ..\vcenters.txt
+#example:
+#vcenter1
+#vcenterb
+#vcenter2000
+#create credentials locally with the user who will run the task, in windows credential manager
+#you need access to port 443 of the vcenters
+
+#change this variables to your emails and smtpserver:
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
+#change credentials name here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
 
 $error.clear()
 
 Start-Transcript log.txt -append
 
 $vcenters = Get-Content -Path ..\vcenters.txt | ? {$_ -notlike "*voc*" -and $_ -notlike "*icex*"}
-$credentials = Get-Content -Path ..\credentials.txt
-$user = ($credentials -split ",")[0]
-$password = ($credentials -split ",")[1]
-Connect-VIServer $vcenters -User $user -Password $password
+Connect-VIServer $vcenters -credential $credentials
 
 $texto= @()
 
@@ -79,7 +93,7 @@ if($hostswdeadpaths.count -gt 0)
 				$target = $scsipathtnodewwn +" "+$scsipathtportwwn
 				$scsilungb = [int]($scsilun.capacitygb)
 				$event = "Dead Path: " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
-				#eventcreate /T warning /L application /ID 302 /SO $vcenter /D $event
+				write-eventlog -log application -source $vcenter -eventid 302 -entrytype warning -message $event
 				$texto += "DeadPath: | " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
 				write-host "DeadPath: | " + $vcenter + " | " + $scsilun.VMHost + " | LUN:" + $nLUN + " | " + $scsilungb +"GB | Vendor:" + $scsilun.Vendor + " | " + $scsipath.state + " | " + $scsilun.MultiPathPolicy + " | " + $path_vmhba + " | Target:" + $target + " | " + $scsilun.canonicalname
 			}
@@ -90,15 +104,15 @@ if($hostswdeadpaths.count -gt 0)
 if($texto.count -gt 0)
 {
 	$texto = Out-String -Inputobject $texto
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI review paths" -body $texto -smtpServer $smtpserver
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI review paths" -body $texto -smtpServer $smtpserver
 	write-host $texto
 	write-host "email sent"
 }
 
 if($error.count -gt 0)
 {
-	$errores = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI review paths, execution error" -body $errores -smtpServer $smtpserver
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI review paths, execution error" -body $errors -smtpServer $smtpserver
 }
 
 Stop-Transcript
