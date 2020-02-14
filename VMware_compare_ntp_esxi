@@ -9,14 +9,12 @@
 #vcenter1
 #vcenterb
 #vcenter2000
-#create ..\credentials.txt
-#example:
-#useradminvcenter,passwordoftheuser
+#create credentials locally with the user who will run the task, in windows credential manager
 #you need access to port 443 of the vcenters
 
 #change this variables to your emails and smtpserver:
-$destemail = "destmail@mail.com"
-$origemail = "origmail@mail.com"
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.com"
 $smtpserver = "localhost"
 
 $error.clear()
@@ -24,10 +22,9 @@ $error.clear()
 Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
 $vcenters = Get-Content -Path ..\vcenters.txt
-$credentials = Get-Content -Path ..\credentials.txt
-$user = ($credentials -split ",")[0]
-$password = ($credentials -split ",")[1]
-Connect-VIServer $vcenters -User $user -Password $password
+#change credentials name here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
+Connect-VIServer $vcenters -credential $credentials
 
 $name = hostname
 $texto= @()
@@ -54,13 +51,13 @@ if($texto.count -gt 0)
 	$texto += ""
 	$texto += "UTC -2"
 	$texto = Out-String -Inputobject $texto
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI ntp esxi" -body $texto -smtpServer $smtpserver
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI ntp esxi" -body $texto -smtpServer $smtpserver
 }
 
 if($error.count -gt 0)
 {
-	$errores = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI ntp esxi, execution error" -body $errores -smtpServer $smtpserver
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI ntp esxi, execution error" -body $errors -smtpServer $smtpserver
 }
 
 Stop-Transcript
