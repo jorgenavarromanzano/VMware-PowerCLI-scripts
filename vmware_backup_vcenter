@@ -1,0 +1,97 @@
+#JORGE NAVARRO MANZANO Script vmware backup vcenter
+#weekly backup using clones of vcenter vms, weekly save last 2 clons
+#https://linkedin.com/in/jorgenavarromanzano
+
+#Instructions:
+#add your vcenters, change passwords, user that launchs tasks of backups, and mails
+#create file info.txt in this format:
+#vcenterip/name,vcentervm_toclone
+#example:
+#enterprisevcenter01,vcenter01
+#carrental02,carrentalvc01
+
+$error.clear()
+
+#change this variables to your emails and smtpserver:
+$destmail = "mail@mail.com"
+$origmail = "mail@mail.es"
+$smtpserver = "localhost"
+#create credentials locally with the user who will run the task, in windows credential manager, and change the username here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "username"}
+
+Start-Transcript log.txt -append
+$text = @()
+$date = get-date -format yyyyMMdd
+$date_lastweek = (get-date).adddays(-7)
+$date_lastweek = (get-date $date_lastweek -format yyyyMMdd)
+$date_twoweeks = (get-date).adddays(-14)
+$date_twoweeks = (get-date $date_twoweeks -format yyyyMMdd)
+
+
+
+$infofile = Get-Content -Path .\info.txt
+foreach($info in $infofile)
+{
+	$server = ($info -split ",")[0]
+	$vcenter = ($info -split ",")[1]
+	
+	Connect-VIServer $server -User $username -Password $password
+	
+	$datastore_wmorefreespace = (Get-Datastore | sort freespacegb -Descending)[0]
+	$datastorefreegb = [int]($datastore_wmorefreespace.freespaceGB)
+	$datastorecapacitygb = [int]($datastore_wmorefreespace.capacityGB)
+	write-host "before clon" $vcenter $datastore_wmorefreespace.name "FreeSpaceGB:" $datastorefreegb "CapacityGB:" $datastorecapacitygb
+	$text += "before clon " + $vcenter +" "+ $datastore_wmorefreespace.name + " FreeSpaceGB: " + $datastorefreegb + " CapacityGB: " + $datastorecapacitygb
+	
+	$vm = get-vm $vcenter
+	$vmdisk = [int]($vm.ExtensionData.Storage.PerDatastoreUsage.committed / 1024 / 1024 / 1024)
+	$nameclon = $vm.name+"_"+$date+"_"+"clonbackup"
+	write-host "clon: " $vm.name " diskGB " $vmdisk
+	$text += "clon: "+$nameclon +" created of "+ $vm.name+ " diskGB "+ $vmdisk + " in " + $datastore_wmorefreespace
+
+	$newcloninfo = new-vm -vm $vm -name $nameclon -location $vm.folder.name -vmhost $vm.vmhost.name -datastore $datastore_wmorefreespace -diskstorageformat thin
+	
+	$nameclon_twoweeks = $vm.name+"_"+$date_twoweeks+"_"+"clonbackup"
+	$clon_twoweeks = get-vm "*$nameclon_twoweeks*"
+	if($clon_twoweeks.count -eq 1 -and $nameclon_twoweeks -eq $clon_twoweeks.name)
+	{
+		write-host "clon two weeks old removed: "$clon_twoweeks.name
+		$text += "clon two weeks old removed: " + $clon_twoweeks.name
+		remove-vm $clon_twoweeks -Confirm:$false -DeletePermanently		
+	}
+	
+	$datastoreafterclon = get-datastore $datastore_wmorefreespace
+	$datastorefreegb = [int]($datastoreafterclon.freespaceGB)
+	$datastorecapacitygb = [int]($datastoreafterclon.capacityGB)
+	write-host "after clon" $vcenter $datastoreafterclon.name "FreeSpaceGB:" $datastorefreegb "CapacityGB:" $datastorecapacitygb
+	$text += "after clon " + $vcenter +" "+ $datastoreafterclon.name + " FreeSpaceGB: " + $datastorefreegb + " CapacityGB: " + $datastorecapacitygb
+	
+	$text += "---------------------------------"
+	
+	Disconnect-VIServer $server -confirm:$false
+	
+	clear-variable datastore_wmorefreespace;clear-variable datastorefreegb;clear-variable datastorecapacitygb
+	clear-variable nameclon;clear-variable vm;clear-variable vmdisk;clear-variable datastore_wmorefreespace
+	clear-variable clon_twoweeks
+	clear-variable datastoreafterclon;clear-variable datastorefreegb;clear-variable datastorecapacitygb
+}
+
+$text = Out-String -Inputobject $text
+send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI weekly vmware backup vcenter" -body $text -smtpServer localhost
+
+if($error.count -gt 0)
+{
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI weekly vmware backup vcenter, review errors" -body $errors -smtpServer localhost
+}
+
+Stop-Transcript
+
+if( [int]((Get-ChildItem .\log.txt).Length / 1024 / 1024) -gt 200)
+{
+	if(test-path .\log.txt.old)
+	{
+		remove-item	.\log.txt.old
+	}
+	Rename-Item .\log.txt .\log.txt.old
+}
