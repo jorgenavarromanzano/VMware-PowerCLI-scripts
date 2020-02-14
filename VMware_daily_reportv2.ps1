@@ -9,16 +9,16 @@
 #vcenter1
 #vcenterb
 #vcenter2000
-#create ..\credentials.txt
-#example:
-#useradminvcenter,passwordoftheuser
+#create credentials locally with the user who will run the task, in windows credential manager
 #you need access to port 443 of the vcenters
 #change $hours
 
 #change this variables to your emails and smtpserver:
-$destemail = "mail@mail.com"
-$origemail = "mail@mail.com"
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
+#change credentials name here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
 
 $hours = 25
 $datebegin = get-date -format yyyyMMdd
@@ -216,9 +216,6 @@ $error.clear()
 Start-Transcript log.txt -append
 $vcenters = @()
 $vcenters = Get-Content -Path ..\vcenters.txt
-$credentials = Get-Content -Path ..\credentials.txt
-$user = ($credentials -split ",")[0]
-$password = ($credentials -split ",")[1]
 
 $hostsnotconnectedmail = @()
 $hostsnotconnectedmail += "------------------------------------------"
@@ -230,7 +227,7 @@ foreach ($vcenter in $vcenters)
 {
 	$text+="           " + $vcenter
 	write-host "           " + $vcenter
-	Connect-VIServer $vcenter -User $user -Password $password
+	Connect-VIServer $vcenters -credential $credentials
 	#HOSTS-NotConnected
 	$hostsnotconnected = @()
 	$hostsnotconnected += get-vmhost | ? {$_.connectionstate -ne "Connected"} | select Name,@{Name="vcenter";Expression={$vcenter}},Connectionstate,Powerstate | sort vcenter,name
@@ -320,12 +317,12 @@ $asunto = "VMware PowerCLI daily report " + $datebegin
 
 write-host $textmail
 
-send-mailmessage -from $origemail -to $destemail -subject $asunto -body $textmail -smtpServer $smtpserver
+send-mailmessage -from $origmail -to $destmail -subject $asunto -body $textmail -smtpServer $smtpserver
 
 if($error.count -gt 0)
 {
-	$errores = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI daily report, execution error" -body $errores -smtpServer $smtpserver
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI daily report, execution error" -body $errors -smtpServer $smtpserver
 }
 
 Stop-Transcript
