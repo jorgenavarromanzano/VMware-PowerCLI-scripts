@@ -11,9 +11,7 @@
 #vcenter1
 #vcenterb
 #vcenter2000
-#create ..\credentials.txt
-#example:
-#useradminvcenter,passwordoftheuser
+#create credentials locally with the user who will run the task, in windows credential manager
 #you need access to port 443 of the vcenters
 
 #alarms eventlogviewer
@@ -26,8 +24,8 @@
 #esxi <> connected and power on alarm 405
 
 #change this variables to your emails and smtpserver:
-$destemail = "tso.sspp3@aaaa.com"
-$origemail = "vmwarepowercli@aaaa.com"
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
 #cpu/ram performance warning and critical, example 94 and 98
 $warning_alarm = 95
@@ -35,6 +33,8 @@ $critical_alarm = 98
 #datastore max latency ms warning and critical, example 50 and 200
 $warning_maxlatency = 50
 $critical_maxlatency = 200
+#change credentials name here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
 
 $error.clear()
 
@@ -49,13 +49,8 @@ foreach($vcenter in $vcenters)
 		new-eventlog -log application -source $vcenter
 	}
 }
-$credentials = Get-Content -Path ..\credentials.txt
-$user = ($credentials -split ",")[0]
-$password = ($credentials -split ",")[1]
-$pass = ConvertTo-SecureString -AsPlainText $password -Force
-$cred = New-Object System.Management.Automation.PSCredential -ArgumentList $user,$pass
 
-Connect-VIServer $vcenters -credential $cred
+Connect-VIServer $vcenters -credential $credentials
 $esxihosts = get-vmhost | sort uid,name
 
 $cpustats = @();$ramstats = @();$latencystats = @();$nicsnolink = @()
@@ -144,13 +139,13 @@ write-host $text
 if($text.count -gt 0)
 {
 	$text = Out-String -Inputobject $text
-	send-mailmessage -from $origemail -to $destemail -subject "VMware monitoring, review body" -body $text -smtpServer $smtpserver
+	send-mailmessage -from $origmail -to $destmail -subject "VMware monitoring, review body" -body $text -smtpServer $smtpserver
 }
 
 if($error.count -gt 0)
 {
 	$errors = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail -subject "VMware monitoring, execution error" -body $errors -smtpServer $smtpserver
+	send-mailmessage -from $origmail -to $destmail -subject "VMware monitoring, execution error" -body $errors -smtpServer $smtpserver
 }
 
 Stop-Transcript
