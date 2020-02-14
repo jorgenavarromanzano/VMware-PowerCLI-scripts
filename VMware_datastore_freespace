@@ -11,27 +11,24 @@
 #vcenter1
 #vcenterb
 #vcenter2000
-#create ..\credentials.txt
-#example:
-#useradminvcenter,passwordoftheuser
+#create credentials locally with the user who will run the task, in windows credential manager
 #you need access to port 443 of the vcenters
 
 #change this variables to your emails and smtpserver:
-$destemail = "destmail@mail.com"
-$origemail = "origmail@mail.com"
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
-$thresholdmail=30000
-$thresholdevent=15000
+$thresholdmail = 30000
+$thresholdevent = 15000
+#change credentials name here:
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
 
 $error.clear()
 
-Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
 $vcenters = Get-Content -Path ..\vcenters.txt
-$credentials = Get-Content -Path ..\credentials.txt
-$user = ($credentials -split ",")[0]
-$password = ($credentials -split ",")[1]
-Connect-VIServer $vcenters -User $user -Password $password
+
+Connect-VIServer $vcenters -credential $credentials
 
 $datastores= @()
 $texto= @()
@@ -48,24 +45,25 @@ foreach ($datastore in $datastores)
 		$texto += $vcenter[1] +" "+ $datacenter +" "+ $datastore.Name +" "+ $datastore.FreeSpaceMB
 		if($datastore.FreespaceMB -lt $thresholdevent)
 		{
-			eventcreate /T warning /L application /ID 301 /SO $vcenter[1] /D $datastore.name
+			write-eventlog -log application -source $vcenter[1] -eventid 301 -entrytype warning -message $datastore.name
+			write-host "event created" + $vcenter[1] + $datastore.name
 		}
 	}
 }
 
 if($texto.count -gt 0)
 {
-	Start-ScheduledTask snapshots-clones
+	#Start-ScheduledTask snapshots-clones
 	$texto = Out-String -Inputobject $texto
-	send-mailmessage -from $origemail -to $destemail -subject "VMware PowerCLI datastore free space" -body $texto -smtpServer $smtpserver
+	send-mailmessage -from $origmail -to $destmail -subject "VMware PowerCLI datastore free space" -body $texto -smtpServer $smtpserver
 }
 
 write-host $texto
 
 if($error.count -gt 0)
 {
-	$errores = Out-String -Inputobject $error
-	send-mailmessage -from $origemail -to $destemail  -subject "VMware PowerCLI datastore free space, execution error" -body $errores -smtpServer $smtpserver
+	$errors = Out-String -Inputobject $error
+	send-mailmessage -from $origmail -to $destmail  -subject "VMware PowerCLI datastore free space, execution error" -body $errors -smtpServer $smtpserver
 }
 
 Stop-Transcript
