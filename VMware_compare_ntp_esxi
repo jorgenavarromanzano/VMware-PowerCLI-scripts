@@ -14,12 +14,11 @@
 
 #change this variables to your emails and smtpserver:
 $destmail = "dest@mail.com"
-$origmail = "orig@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
 
 $error.clear()
 
-Add-PSSnapin VMware.VimAutomation.Core
 Start-Transcript log.txt -append
 $vcenters = Get-Content -Path ..\vcenters.txt
 #change credentials name here:
