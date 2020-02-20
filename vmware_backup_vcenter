@@ -13,11 +13,11 @@
 $error.clear()
 
 #change this variables to your emails and smtpserver:
-$destmail = "mail@mail.com"
-$origmail = "mail@mail.es"
+$destmail = "dest@mail.com"
+$origmail = "orig@mail.es"
 $smtpserver = "localhost"
 #create credentials locally with the user who will run the task, in windows credential manager, and change the username here:
-$credentials = (Get-StoredCredential) | ? {$_.username -eq "username"}
+$credentials = (Get-StoredCredential) | ? {$_.username -eq "user"}
 
 Start-Transcript log.txt -append
 $text = @()
@@ -27,15 +27,13 @@ $date_lastweek = (get-date $date_lastweek -format yyyyMMdd)
 $date_twoweeks = (get-date).adddays(-14)
 $date_twoweeks = (get-date $date_twoweeks -format yyyyMMdd)
 
-
-
 $infofile = Get-Content -Path .\info.txt
 foreach($info in $infofile)
 {
 	$server = ($info -split ",")[0]
 	$vcenter = ($info -split ",")[1]
 	
-	Connect-VIServer $server -User $username -Password $password
+	Connect-VIServer $server -credential $credentials
 	
 	$datastore_wmorefreespace = (Get-Datastore | sort freespacegb -Descending)[0]
 	$datastorefreegb = [int]($datastore_wmorefreespace.freespaceGB)
